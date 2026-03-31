@@ -8,31 +8,46 @@
   "license": "All rights reserved",
   "keywords": ["tdd", "workflow", "testing", "dokime", "checkpoints", "ambiguity", "peira"],
   "skills": "./skills/",
-  "agents": "./agents/",
   "userConfig": {
     "spec_path": {
-      "description": "Base path for spec files (e.g., ~/.claude-specs/myproject)"
+      "title": "Spec Path",
+      "description": "Base path for spec files (e.g., ~/.claude-specs/myproject)",
+      "type": "string"
     },
     "test_command": {
-      "description": "Command to run tests (e.g., php artisan test, yarn test, pytest)"
+      "title": "Test Command",
+      "description": "Command to run tests (e.g., php artisan test, yarn test, pytest)",
+      "type": "string"
     },
     "test_filter_flag": {
-      "description": "Flag to filter tests by name (e.g., --filter for PHPUnit, --grep for Jest)"
+      "title": "Test Filter Flag",
+      "description": "Flag to filter tests by name (e.g., --filter for PHPUnit, --grep for Jest)",
+      "type": "string"
     },
     "lint_command": {
-      "description": "Command to run linter/formatter (e.g., pint, eslint, prettier)"
+      "title": "Lint Command",
+      "description": "Command to run linter/formatter (e.g., pint, eslint, prettier)",
+      "type": "string"
     },
     "static_analysis_command": {
-      "description": "Command to run static analysis (e.g., phpstan, tsc --noEmit)"
+      "title": "Static Analysis Command",
+      "description": "Command to run static analysis (e.g., phpstan, tsc --noEmit)",
+      "type": "string"
     },
     "base_branch": {
-      "description": "Branch to create feature branches from (e.g., qa, develop, main)"
+      "title": "Base Branch",
+      "description": "Branch to create feature branches from (e.g., qa, develop, main)",
+      "type": "string"
     },
     "stakeholders": {
-      "description": "Comma-separated list of stakeholder names for ambiguity surfacing"
+      "title": "Stakeholders",
+      "description": "Comma-separated list of stakeholder names for ambiguity surfacing",
+      "type": "string"
     },
     "specialized_agents": {
-      "description": "Comma-separated list of specialized agent paths for code quality review"
+      "title": "Specialized Agents",
+      "description": "Comma-separated list of specialized agent paths for code quality review",
+      "type": "string"
     }
   }
 }
