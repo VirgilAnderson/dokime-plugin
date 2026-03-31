@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "owner": {
+    "name": "Virgil Anderson",
+    "url": "https://github.com/VirgilAnderson"
+  },
+  "plugins": [
+    {
+      "name": "dokime",
+      "description": "A structured development workflow with human checkpoints — surfaces silent assumptions before they become code.",
+      "version": "1.0.0",
+      "source": "./",
+      "license": "All rights reserved"
+    }
+  ]
+}
