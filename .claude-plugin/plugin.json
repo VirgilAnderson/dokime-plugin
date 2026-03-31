@@ -1,0 +1,38 @@
+{
+  "name": "dokime",
+  "description": "A structured development workflow with human checkpoints — surfaces silent assumptions before they become code. Dokime: proven character through trial.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Virgil Anderson"
+  },
+  "license": "All rights reserved",
+  "keywords": ["tdd", "workflow", "testing", "dokime", "checkpoints", "ambiguity", "peira"],
+  "skills": "./skills/",
+  "agents": "./agents/",
+  "userConfig": {
+    "spec_path": {
+      "description": "Base path for spec files (e.g., ~/.claude-specs/myproject)"
+    },
+    "test_command": {
+      "description": "Command to run tests (e.g., php artisan test, yarn test, pytest)"
+    },
+    "test_filter_flag": {
+      "description": "Flag to filter tests by name (e.g., --filter for PHPUnit, --grep for Jest)"
+    },
+    "lint_command": {
+      "description": "Command to run linter/formatter (e.g., pint, eslint, prettier)"
+    },
+    "static_analysis_command": {
+      "description": "Command to run static analysis (e.g., phpstan, tsc --noEmit)"
+    },
+    "base_branch": {
+      "description": "Branch to create feature branches from (e.g., qa, develop, main)"
+    },
+    "stakeholders": {
+      "description": "Comma-separated list of stakeholder names for ambiguity surfacing"
+    },
+    "specialized_agents": {
+      "description": "Comma-separated list of specialized agent paths for code quality review"
+    }
+  }
+}
