@@ -13,8 +13,19 @@ Dokime forces every decision into the open where a human can approve, correct, o
 
 ## Installation
 
+**Step 1: Add the marketplace**
+```bash
+claude plugin marketplace add VirgilAnderson/dokime-plugin
+```
+
+**Step 2: Install the plugin**
 ```bash
 claude plugin install dokime
+```
+
+**Step 3 (optional): Scope to a project**
+```bash
+claude plugin install dokime --scope project
 ```
 
 ## Usage
@@ -28,6 +39,13 @@ Or in conversation:
 ```
 I want to implement this task using the Dokime workflow. Here's the task:
 [paste ticket or describe the task]
+```
+
+## Updating
+
+```bash
+claude plugin marketplace update dokime
+claude plugin update dokime
 ```
 
 ## The 15 Steps
