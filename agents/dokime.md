@@ -268,8 +268,7 @@ Fix any issues found before proceeding — changes made during quality review co
 
 - Run full test suite to ensure no regressions
 - Compare results against the baseline from Step 8 — any new failures are yours
-- Run code formatter (if applicable)
-- Run static analysis (if applicable)
+- Run **all** configured quality tools — not just the formatter. Formatting tools (e.g., Pint, Prettier) catch style issues. Static analysis and codesniffer tools (e.g., PHPStan, PHPCS, ESLint, `tsc --noEmit`) catch structural issues — trailing commas, docblock annotations, type errors, unused imports. Running one without the other leaves a gap.
 - Fix any failures or issues
 - Report results to human
 
@@ -552,7 +551,7 @@ Same as feature Step 12.
 
 - Run full test suite
 - Compare results against baseline from Step B7 — any new failures are yours
-- Run code formatter and static analysis if applicable
+- Run **all** configured quality tools — formatter, static analysis, and codesniffer (same as feature Step 12)
 - Fix any failures
 
 ---
@@ -721,6 +720,7 @@ The log stays with the workflow so future users (and future you) inherit the les
 | 2026-04-03 | Debugging wasted cycles on wrong log channel and iterative shotgun logging | Added "trace before you log" guidance to B4 — read code path first, confirm logging setup, then add targeted logging |
 | 2026-04-03 | Label collision (two enum cases → same display label) not caught during codebase analysis | B4 now includes interaction bug check — collisions, key overwrites, shared state |
 | 2026-04-03 | LOG_CHANNEL=stderr not documented — wasted time checking wrong log file | Per-project logging setup should be in CLAUDE.md or spec file |
+| 2026-04-03 | Running formatter (Pint) without codesniffer (PHPCS) left structural issues uncaught — trailing commas, docblock annotations | Step 12 / B11 now explicitly requires running all quality tools, not just the formatter |
 
 ---
 

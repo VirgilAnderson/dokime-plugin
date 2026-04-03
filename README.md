@@ -116,6 +116,7 @@ Create `.claude/dokime-config.json` in your project root:
   "test_filter_flag": "--filter",
   "lint_command": "pint",
   "static_analysis_command": "phpstan analyse",
+  "codesniffer_command": "phpcs",
   "base_branch": "develop",
   "stakeholders": ["Product Owner", "Tech Lead", "QA"],
   "specialized_agents": []

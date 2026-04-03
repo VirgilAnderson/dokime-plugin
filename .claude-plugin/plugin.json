@@ -31,7 +31,12 @@
     },
     "static_analysis_command": {
       "title": "Static Analysis Command",
-      "description": "Command to run static analysis (e.g., phpstan, tsc --noEmit)",
+      "description": "Command to run static analysis (e.g., phpstan analyse, tsc --noEmit)",
+      "type": "string"
+    },
+    "codesniffer_command": {
+      "title": "Code Sniffer Command",
+      "description": "Command to run code sniffer / structural linting (e.g., phpcs, eslint). Catches issues formatters miss — trailing commas, docblock annotations, unused imports.",
       "type": "string"
     },
     "base_branch": {
