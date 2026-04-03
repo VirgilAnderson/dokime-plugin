@@ -1,7 +1,7 @@
 {
   "name": "dokime",
   "description": "A structured development workflow with human checkpoints — surfaces silent assumptions before they become code. Dokime: proven character through trial.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "Virgil Anderson"
   },

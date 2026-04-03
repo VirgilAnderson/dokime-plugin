@@ -34,6 +34,7 @@ claude plugin install dokime --scope project
 |-------|-------------|
 | `/dokime:workflow` | Run the full Dokime development workflow on a task or ticket |
 | `/dokime:update` | Pull the latest version and reinstall the plugin |
+| `/dokime:version` | Show installed version and check for updates |
 
 ## Usage
 
