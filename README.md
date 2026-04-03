@@ -28,7 +28,16 @@ claude plugin install dokime
 claude plugin install dokime --scope project
 ```
 
+## Skills
+
+| Skill | Description |
+|-------|-------------|
+| `/dokime:workflow` | Run the full Dokime development workflow on a task or ticket |
+| `/dokime:update` | Pull the latest version and reinstall the plugin |
+
 ## Usage
+
+### Start a workflow
 
 ```
 /dokime:workflow Implement TICKET-1234: Add user notification preferences
@@ -41,12 +50,13 @@ I want to implement this task using the Dokime workflow. Here's the task:
 [paste ticket or describe the task]
 ```
 
-## Updating
+### Update the plugin
 
-```bash
-claude plugin marketplace update dokime
-claude plugin update dokime
 ```
+/dokime:update
+```
+
+Pulls the latest from the remote repo and reinstalls. Start a fresh session after updating.
 
 ## Feature Workflow (16 Steps)
 
