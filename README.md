@@ -7,7 +7,7 @@ A structured development workflow for AI-assisted software engineering with huma
 
 ## What It Does
 
-Dokime is a 15-step TDD workflow that surfaces silent assumptions before they become code. AI coding tools make reasonable decisions invisibly — the right architecture, the right edge case handling, the right business logic interpretation. The code works. But nobody knows *why* it was built that way.
+Dokime is a TDD workflow that surfaces silent assumptions before they become code. AI coding tools make reasonable decisions invisibly — the right architecture, the right edge case handling, the right business logic interpretation. The code works. But nobody knows *why* it was built that way.
 
 Dokime forces every decision into the open where a human can approve, correct, or learn from it. The result is a codebase that humans can actually maintain.
 
@@ -48,24 +48,49 @@ claude plugin marketplace update dokime
 claude plugin update dokime
 ```
 
-## The 15 Steps
+## Feature Workflow (16 Steps)
 
 ```
-Step 1:  Capture Specs        → Write spec file, decisions log
-Step 2:  Understand           → Central problem, ambiguities
-Step 3:  Surface Ambiguities  → Classify, resolve, log
-Step 4:  Evaluate Tradeoffs   → Gains, costs, alternatives
-Step 5:  Analyze Codebase     → Patterns, reuse, blast radius
-Step 6:  Propose Approach     → Scale assessment, plan, scope
-Step 7:  Establish Baseline   → Fresh branch, run tests, log state
-Step 8:  Write Failing Tests  → Red (parallelize if independent)
-Step 9:  Implement            → Green (parallelize if independent)
-Step 10: Code Quality Review  → Spec + quality + specialized agents
-Step 11: Regression Tests     → Full suite, compare to baseline
-Step 12: Verify               → Human tests 1-by-1, composition
-Step 13: Document             → READMEs, docblocks, conventions
-Step 14: Completion Check     → Spec vs. implementation
-Step 15: Ship                 → PR, final spec check, QA guide
+Step 1:  Capture Specs        → Write spec file, decisions log     → Spec saved
+Step 2:  Classify             → Feature or Bug?                    → Route to workflow
+Step 3:  Understand           → Central problem, ambiguities       → CHECKPOINT
+Step 4:  Surface Ambiguities  → Classify, resolve, log             → CHECKPOINT
+Step 5:  Evaluate Tradeoffs   → Gains, costs, alternatives         → CHECKPOINT
+Step 6:  Analyze Codebase     → Patterns, reuse, blast radius      → Document findings
+Step 7:  Propose Approach     → Scale assessment, plan, scope      → CHECKPOINT
+Step 8:  Establish Baseline   → Fresh branch, run tests, log state → CHECKPOINT
+Step 9:  Write Failing Tests  → Red (parallelize if independent)   → CHECKPOINT
+Step 10: Implement            → Green (parallelize if independent) → Tests pass
+Step 11: Code Quality Review  → Spec + quality + specialized agents→ CHECKPOINT
+Step 12: Regression Tests     → Full suite, compare to baseline    → No new regressions
+Step 13: Verify               → Human tests 1-by-1, composition    → CHECKPOINT
+Step 14: Document             → READMEs, docblocks, conventions    → Docs updated
+Step 15: Completion Check     → Spec vs. implementation            → CHECKPOINT
+Step 16: Ship                 → PR, final spec check, QA guide     → CHECKPOINT
+```
+
+## Bug Fix Workflow (B1-B15)
+
+Branches from Step 2 when the ticket is a bug. Diagnosis-first — the ambiguity isn't "what should we build?" but "why is this broken?"
+
+```
+Step 1:  Capture Specs        → Write spec file                    → Spec saved
+Step 2:  Classify             → Bug → route here                   → Route to bug workflow
+Step B1: Capture the Bug      → Repro steps, expected, actual      → Bug documented
+Step B2: Understand           → Central problem, initial hypotheses→ CHECKPOINT
+Step B3: Reproduce            → Trigger bug on local               → CHECKPOINT
+Step B4: Root Cause           → Trace execution, diagnose          → CHECKPOINT (critical)
+Step B5: Desired Behavior     → What should happen? Ambiguities?   → CHECKPOINT
+Step B6: Blast Radius & Fix   → What could break? Propose fix      → CHECKPOINT
+Step B7: Establish Baseline   → Fresh branch, run tests, log state → CHECKPOINT
+Step B8: Red                  → Test that reproduces the bug        → CHECKPOINT
+Step B9: Green                → Fix the bug                        → Test passes
+Step B10: Code Quality Review → Fix correctness + code quality     → CHECKPOINT
+Step B11: Regression Tests    → Full suite, compare to baseline    → No new regressions
+Step B12: Verify              → Bug gone, nothing else broke       → CHECKPOINT
+Step B13: Document            → Docs if behavior changed           → Docs updated
+Step B14: Completion Check    → Spec vs. fix                       → CHECKPOINT
+Step B15: Ship                → PR, repro test, QA guide           → CHECKPOINT
 ```
 
 Every step with a CHECKPOINT requires human confirmation before proceeding.
@@ -91,27 +116,33 @@ The plugin reads this file to customize paths, commands, and team-specific setti
 
 ## When to Use
 
-**Full workflow (all 15 steps):**
+**Full workflow:**
 - Ambiguous specs
 - Business logic with multiple valid interpretations
 - Financial transactions, money movement
 - Architecture decisions that are hard to reverse
 
-**Abbreviated (Steps 1-7, then skip to Step 9):**
+**Abbreviated (Steps 1-8, then skip to Step 10):**
 - CSS / cosmetic changes
 - Config changes
 - Copy / text updates
 - Clear specs with no ambiguity
 
-**Steps 1-7 always apply.** The question is whether you write tests first (Step 8) or skip straight to implementation (Step 9).
+**Bug fix workflow:**
+- Something that should work but doesn't
+- Unclear symptoms (treat as bug until root cause says otherwise)
+
+**Steps 1-8 always apply.** The question is whether you write tests first (Step 9) or skip straight to implementation (Step 10).
 
 ## Evidence
 
-Tested in controlled experiments (4 peiraí, Feb 2026) and production brownfield tickets (Feb-Mar 2026):
+Tested in controlled experiments (4 peiraí, Feb 2026) and production brownfield tickets (Feb-Apr 2026):
 
 - Ambiguity surfacing catches 12-16 silent assumptions per ticket vs 0 for freestyle
 - Scale heuristic correctly triages complexity every time
 - Composition check catches integration bugs that unit tests miss
+- Verify step catches bugs that automated tests can't (label collisions, UI placement errors)
+- "Trace before you log" saves significant debugging time on bug fixes
 - Production-tested daily on Laravel tickets with team stakeholders
 
 ## Philosophy
