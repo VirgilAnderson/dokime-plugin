@@ -53,6 +53,7 @@ The spec file captures **decisions**, not just requirements. "Chose X because Y.
 
 ## Step 1: Capture Specs
 
+- **Scan the Evolution Log** (bottom of this document) for recent entries — lessons from the last session may apply to this ticket. The log is operational, not archival; entries written in the morning can save work the same afternoon.
 - Parse the ticket/task requirements
 - Create the spec file
 - Write to the spec file:
@@ -326,7 +327,8 @@ While the context is fresh — not as an afterthought.
 - For EACH acceptance criterion, verify it's implemented
 - For EACH requirement, confirm it's addressed
 - Ask yourself: "Did I build ALL portions of this ticket?"
-- Create a checklist mapping each requirement to implementation evidence
+- **Map each acceptance criterion to specific file(s) and method(s)** that implement it — not just "yes this was handled." Vague completion checks are how requirements silently vanish.
+- **Cross-repo criteria are a known failure mode.** When an acceptance criterion touches multiple repositories, name each repo's contribution explicitly. It's easy to mentally check off a criterion against one repo's PR while the corresponding change in the other repo never got written.
 - Verify documentation from Step 13 covers the changes
 - Flag any gaps or partial implementations
 
@@ -344,10 +346,11 @@ While the context is fresh — not as an afterthought.
 
 **Final Spec Check:**
 - Re-read the spec file
-- Go through each acceptance criterion and confirm it was addressed
+- Use Step 15's criterion→file→method mapping as the source of truth — verify the map is complete, not just that criteria "feel addressed"
 - Create a checklist showing:
-  - [ ] Each requirement and whether it was implemented
+  - [ ] Each requirement, the file(s)/method(s) that implement it, and whether it's complete
   - [ ] Each acceptance criterion and whether tests cover it
+  - [ ] For cross-repo criteria: each repo's contribution named explicitly
   - [ ] Any items that were descoped or need follow-up
 - If anything was missed, flag it for the human
 
@@ -379,6 +382,8 @@ While the context is fresh — not as an afterthought.
 | Bug fixes (always — reproduce the bug as a test first) | Prototyping / spikes |
 
 **Steps 1-8 (Spec, Classify, Understanding, Ambiguities, Tradeoffs, Analysis, Plan, Baseline) always apply.** The only question is whether you write tests first or skip straight to implementation for low-risk work.
+
+**The real heuristic:** The workflow's value is proportional to the risk of *silent errors*, not proportional to lines of code changed. A one-line fix in a calculation method that groups data across repos warrants the full ceremony. A 200-line cosmetic refactor may not. Small PRs that touch shared logic, cross-repo boundaries, or pipeline stages are exactly where requirements silently vanish — because the change "looks simple" and completion checking gets lazy.
 
 **Rule of thumb:** If it moves money or changes data, full TDD. If it's a bug, always write the reproduction test first.
 
@@ -427,6 +432,13 @@ If the ticket is missing reproduction steps, expected result, or actual result �
    - Report back to the human — you need more information or the bug may be intermittent
    - **Do not proceed until you can reliably trigger the bug**
 4. Document the exact reproduction steps that work (they may differ from the ticket)
+
+**Anti-pattern: "The code clearly shows the bug, so I don't need to run it."** Code inspection is not reproduction. When the root cause is obvious from reading the source, that certainty is exactly when you're most likely to skip this step — and exactly when skipping it does the most damage. Without local reproduction:
+- B12 Verify has no anchor to compare against — you're verifying the fix against your *imagination* of the broken state, not an observed one
+- You can't detect env-specific factors (config, data state, feature flags) that could invalidate the fix
+- You can't visually confirm that the user experience matches what the ticket describes
+
+The obviousness of the diagnosis is not a reason to skip reproduction — if anything, it's a warning sign that a checkpoint is about to be rationalized away.
 
 **CHECKPOINT: Human confirms the bug is reproduced locally.**
 
@@ -721,6 +733,9 @@ The log stays with the workflow so future users (and future you) inherit the les
 | 2026-04-03 | Label collision (two enum cases → same display label) not caught during codebase analysis | B4 now includes interaction bug check — collisions, key overwrites, shared state |
 | 2026-04-03 | LOG_CHANNEL=stderr not documented — wasted time checking wrong log file | Per-project logging setup should be in CLAUDE.md or spec file |
 | 2026-04-03 | Running formatter (Pint) without codesniffer (PHPCS) left structural issues uncaught — trailing commas, docblock annotations | Step 12 / B11 now explicitly requires running all quality tools, not just the formatter |
+| 2026-04-09 | Step 15 Completion Check passed on ICOV3-1069 but an acceptance criterion ("CoCard section above Fasteezy") was silently dropped because the work crossed two repos — the API PR only touched `getCsvHeaders()`, while the criterion required changes to `calc()`. Criterion was mentally checked off against the Admin PR that shipped new columns, not against the calc logic that actually groups the data. Winston caught it in QA on next pass. | Step 15 now requires mapping each acceptance criterion to **specific file(s) and method(s)** that implement it, not just checking if the criterion "feels done." When a criterion touches multiple repos, each repo's contribution must be named explicitly. Cross-repo criteria are a known failure mode of completion checking. |
+| 2026-04-09 | On ICOV3-1069 Pass 2, skipped B3 (Reproduce) and went straight from B2 (Understand) to B4 (Root Cause) because the missing CoCard branch was visible in code inspection. Rationalized as "I don't need to run it to confirm what I already know." Virgil caught it: *"Why did we skip B3?"* Failure mode: **clarity of diagnosis is not permission to skip reproduction**. When the code reading feels certain, that certainty is exactly the thing that makes you dangerous — it's the same failure mode as "jumping to implementation before tests," just earlier in the flow. Without local reproduction, B12 Verify has no anchor — you're comparing the fix against an *imagined* broken state, not an observed one. | B3 is non-negotiable regardless of how obvious the root cause looks in source. Added explicit anti-pattern to B3: "If you read the bug in code and feel certain, that is exactly when you most need to run it." The obviousness of the diagnosis is irrelevant to the reproduction requirement — if anything, it's a warning sign that you're about to skip a checkpoint. |
+| 2026-04-09 | ICOV3-1069 Pass 2 ran end-to-end cleanly through the full Bug Fix Workflow (B1–B15). One process violation (skipped B3, caught and reversed), one quality correction (magic strings → class constants at B8/B9, caught by Virgil), zero iterative debugging, zero rework. Clean-pass characteristics: diagnosis visible in source, pattern precedent already in codebase (PPSS), blast radius small and bounded, B13 Document was near-zero because docblocks were written inline during B9 Green, B10/B11 collapsed cleanly because the full suite ran without regressions on the first attempt. **Meta-observation worth logging separately:** both evolution-log entries from earlier the same day (Step 15 cross-repo completion rule + B3 "code inspection is not reproduction" anti-pattern) were operationally useful hours later — the cross-repo rule drove the B14 completion mapping, and the B3 anti-pattern almost repeated itself in the same pass. | No workflow changes needed — this is dokime running in its "well-formed inputs" mode. Documented as evidence that (a) the ceremony scales down cleanly on well-scoped bugs: it still surfaces an architecture decision at B8/B9 (const refactor), still maps acceptance criteria across repos at B14, still produces ship-ready PR drafts at B15 — value is proportional to the risk of silent errors, not proportional to lines of code changed; and (b) the Evolution Log is *operational*, not archival, on an active project — lessons written in the morning can save work the same afternoon. A workflow doc that lives on a shelf is just documentation; one whose lessons compound within the same session is a tool. |
 
 ---
 
