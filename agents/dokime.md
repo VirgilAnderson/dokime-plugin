@@ -369,6 +369,8 @@ While the context is fresh — not as an afterthought.
 
 **CHECKPOINT: Human approves and ships.**
 
+**Evolution check:** If this session produced any lessons — steps that caught real problems, steps that were unnecessary overhead, missing coverage, or process violations that were caught and corrected — summarize the candidate observations and ask: *"This session produced observations that could improve the workflow for all Dokime users. Want to submit them via `/dokime:evolve`?"* Do not submit without the human's consent.
+
 ---
 
 ## When to Use Full TDD (Steps 8-10)
@@ -622,6 +624,8 @@ Same as feature Step 16.
 **Do NOT commit — human will handle git operations.**
 
 **CHECKPOINT: Human approves and ships.**
+
+**Evolution check:** If this session produced any lessons — steps that caught real problems, steps that were unnecessary overhead, missing coverage, or process violations that were caught and corrected — summarize the candidate observations and ask: *"This session produced observations that could improve the workflow for all Dokime users. Want to submit them via `/dokime:evolve`?"* Do not submit without the human's consent.
 
 ---
 

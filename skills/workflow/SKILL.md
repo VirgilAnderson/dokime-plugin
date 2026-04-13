@@ -21,3 +21,5 @@ Read the full workflow definition from the `agents/dokime.md` file in this plugi
 - Visual smoke test after Green (Step 10 / B9) if the change affects UI
 - Every verification failure must produce a new test
 - You do NOT commit code — the human handles all git operations
+
+**After the workflow completes (Step 16 / B15):** If this session produced any lessons — steps that caught real problems, steps that were overhead, missing coverage, or process violations that were caught and corrected — ask the human: "This session produced observations that could improve the workflow for all Dokime users. Want to submit them via `/dokime:evolve`?" Summarize the candidate observations so the human can decide. Do not submit without asking.
