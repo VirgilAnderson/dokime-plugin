@@ -77,7 +77,7 @@ Step 12: Regression Tests     → Full suite, compare to baseline    → No new 
 Step 13: Verify               → Human tests 1-by-1, composition    → CHECKPOINT
 Step 14: Document             → READMEs, docblocks, conventions    → Docs updated
 Step 15: Completion Check     → Spec vs. implementation            → CHECKPOINT
-Step 16: Ship                 → PR, final spec check, QA guide     → CHECKPOINT
+Step 16: Ship                 → PR packaging, desc, spec, QA guide → CHECKPOINT
 ```
 
 ## Bug Fix Workflow (B1-B15)

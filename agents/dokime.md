@@ -254,6 +254,7 @@ If a test passes before you write the implementation, the test isn't testing any
 **Pass 2 — Code quality:**
 - Does the code follow the project's coding standards and conventions (identified in Step 5)?
 - Is it DRY? Could any new code reuse existing services, traits, or helpers?
+- Is the code structurally organized — responsibilities in the right classes, file/namespace structure matching the feature boundary? Would a new developer find the right file on the first try? (Distinct from conventions: this is *discoverability and maintainability*, not style. Tests won't catch it — working code in the wrong place still works.)
 - Are there security concerns (injection, XSS, mass assignment, etc.)?
 - Are there performance concerns (N+1 queries, missing indexes, unnecessary loops)?
 
@@ -278,6 +279,8 @@ Fix any issues found before proceeding — changes made during quality review co
 ## Step 13: Verify
 
 **Walk through each test scenario one at a time. Do not batch.**
+
+Verification catches what automated tests can't — **UI/behavior issues** (layout, interactions, real user flow) *and* **infrastructure/config issues** (unconfigured services, disk/S3 gaps, environment drift masked by `Storage::fake()` or similar). Both surface here.
 
 1. Identify all test scenarios (happy path, edge cases, error conditions, composition). Present the full list for human approval before starting.
 
@@ -337,6 +340,11 @@ While the context is fresh — not as an afterthought.
 ---
 
 ## Step 16: Ship
+
+**PR Packaging (decide before drafting):**
+- Is the commit history clean? Squash WIP / merge / fix-fix-fix noise if appropriate — reviewers read commits, not just the final diff.
+- Does the diff include infrastructure or preparatory changes that aren't part of this feature (schema dumps, `.env.testing` edits, unrelated refactors)? Consider splitting them into separate PRs — reviewer attention is finite, and mixed PRs are harder to review and revert.
+- Is the diff scoped to what a reviewer actually needs to see? Minimize noise.
 
 **PR Description:**
 - Summarize changes made
