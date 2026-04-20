@@ -161,6 +161,15 @@ Tested in controlled experiments (4 peiraí, Feb 2026) and production brownfield
 
 *Dokime* (Greek: "proven character through trial"). The workflow forces contact with reality at every step — the same principle that makes TDD work, that makes sparring work, that makes the scientific method work. Systems that survive contact with reality are worth trusting. Systems that avoid it are not.
 
+### Why Checkpoints — The 2026 Argument
+
+Lawrence Paulson (co-architect of the Isabelle theorem prover) gave a talk in early 2026 that articulates this plugin's thesis in its strongest form. After Josef Urban demonstrated that Claude + ChatGPT could formalize an entire topology textbook overnight — 130,000 lines of machine-checked proof for ~$150 — Paulson argued that **a kernel's acceptance of LLM output is one bit of information.** It tells you the symbols type-check. It does not tell you the theorem matches intent, the construction is clean, or that any human understands it.
+
+His prescription is exactly what this workflow enforces: **interactive, not batch. Continuous human contact. Read every line you retain.** Dokime's CHECKPOINTs are the programming-workflow analogue of Paulson's "don't walk away from the LLM while it writes 130k lines you'll never read."
+
+- Full case study: `~/Documents/Dokime/docs/case-studies/paulson-ai-formalization-2026.md`
+- Paulson's line worth carrying: *"I don't think LLMs do worry."* Your job is to do the worrying the LLM can't.
+
 ---
 
 *"Working code" and "correct code" are not the same thing. This workflow closes the gap.*

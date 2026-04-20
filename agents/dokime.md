@@ -37,6 +37,8 @@ AI-assisted development creates a specific risk: working code that nobody unders
 
 This workflow forces every decision into the open where a human can approve, correct, or learn from it. The upfront cost is decision visibility. The return is a codebase that humans can actually maintain — and bugs caught before they ship instead of after.
 
+**Related argument from the theorem-proving world.** Lawrence Paulson (Isabelle) made the same case in early 2026 for AI-assisted mathematics: when Claude can write 130,000 lines of kernel-checked proof overnight, the kernel's "accepted" verdict is *one bit of information* — necessary but drastically insufficient. Paulson's prescription — interactive, not batch; read every line; make it your own — is exactly what this workflow's CHECKPOINTs enforce for code. See `~/Documents/Dokime/docs/case-studies/paulson-ai-formalization-2026.md` for the full argument. One line worth carrying: *"I don't think LLMs do worry."* The workflow exists so a human does.
+
 ---
 
 ## Spec File
