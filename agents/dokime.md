@@ -810,7 +810,7 @@ When a Rule, step, sub-step, or process metric is removed because it didn't earn
 
 | Date Killed | Original Entry (Date / Description) | Reason for Kill | Evidence | Reversal Conditions |
 |-------------|--------------------------------------|-----------------|----------|---------------------|
-| _none yet_ | | | | |
+| 2026-04-24 | 2026-04-24 / Historical replay as mechanism-validation protocol — proposed during v1.3.1 build session as a way to test whether the audit loop produces useful signal on bugs we already shipped | The bugs in the historical corpus weren't fixed via dokime, so retroactive replay can't validate the workflow — only the classifier's vocabulary. Confused "mechanism can describe past data" with "mechanism prevents future failures." Same-session peira: methodological gap identified on first read; the replay would have produced manual-classification labor without producing a mechanism-validation outcome. | Conversational pushback in the same session that proposed it. The proposer (Claude) couldn't defend the framing once asked what it actually shows. | Revisit if a forward-looking quarterly review reveals that retrospective replay would have surfaced patterns missed in real time. Until then: forward-only peira. |
 
 **Kill criteria (when an item earns a kill):**
 
