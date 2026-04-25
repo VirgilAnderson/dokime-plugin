@@ -224,6 +224,10 @@ Test names should read as sentences. If someone reads just the test names, they 
 
 If a test passes before you write the implementation, the test isn't testing anything — fix it.
 
+**Mutation-test new tests (strongly recommended).** For each new or changed test, briefly mutate the production code in a way that should make the test fail. If the test still passes, it isn't discriminating against the bug you care about — strengthen the assertion or the setup. Restore the production code before continuing. This is the multi-bit version of the red step: "did I see red once?" is one bit; "does this test discriminate against the mutation I care about?" is what catches false greens.
+
+**Beware tautological mocks.** When a test mocks infrastructure (storage, queues, cache, external services, auth) using the same hardcoded value the code under test uses, the test cannot fail for that value — the mock mirrors the code's blind spot. Example: production code calls `Storage::disk("local")`, test calls `Storage::fake("local")`. Switching the production disk to a different value leaves the test passing. Either refactor the code to read from config and mock the config layer, or write an integration test against real infrastructure. Mutation testing exposes this directly. See Rule 11.
+
 **Parallel subagents:** If the plan from Step 7 identified truly independent sub-problems, dispatch separate agents to write tests for each simultaneously. Independent means: no shared state, no shared files, no interaction effects. If in doubt, do them sequentially — false independence creates merge conflicts and interaction bugs.
 
 **CHECKPOINT: Failing tests reviewed. Do they cover the right behavior? Are edge cases included? Do they match the spec from Step 1?**
@@ -259,6 +263,10 @@ If a test passes before you write the implementation, the test isn't testing any
 - Is the code structurally organized — responsibilities in the right classes, file/namespace structure matching the feature boundary? Would a new developer find the right file on the first try? (Distinct from conventions: this is *discoverability and maintainability*, not style. Tests won't catch it — working code in the wrong place still works.)
 - Are there security concerns (injection, XSS, mass assignment, etc.)?
 - Are there performance concerns (N+1 queries, missing indexes, unnecessary loops)?
+
+**Pass 3 — Test/code agreement (tautological mock check, see Rule 11):**
+- For each new test that mocks infrastructure (storage, queues, cache, external services, auth, feature flags): name every hardcoded value the test fixture and the production code share. If they share one, is that agreement structural (driven by config or environment) or coincidental (both hardcoded)? Coincidental agreement = tautological mock — refactor or integration-test.
+- For each new test: name a change to the production code that should make the test fail. If you cannot name one, the test isn't discriminating against the bug it was written for.
 
 **Specialized agents:** If the project has domain-specific coding agents (e.g., authorization experts, data layer experts, workflow experts, test data experts), dispatch them to review the changes in their area of expertise. Each agent reviews independently and reports findings. This catches domain-specific issues that a general review misses.
 
@@ -487,7 +495,21 @@ Before adding any debug output, confirm:
 
 **Anti-pattern: "Does this look right?"** Do not present a root cause hypothesis to the human as a "does this look right?" question. That's asking the human to be a genie — to validate your inference without evidence. Present the hypothesis, the experiment you designed, and the evidence the experiment produced. The checkpoint is "here is the evidence," not "does this look right?"
 
-**CHECKPOINT: Human confirms root cause diagnosis *based on experimental evidence*. This is the most important checkpoint in the bug workflow — a wrong diagnosis means a wrong fix.**
+**Classify the failure class (workflow audit).** With root cause in hand, cross-reference this bug against the Failure Class Registry in `~/Documents/Dokime/data/ledger.md` (or the project's local equivalent). Three possibilities:
+
+- **Known class** — the bug matches an existing entry. Note which evolution rule should have caught it. Then ask: was the rule violated (discipline gap), not applicable to this context (rule needs scope refinement), or insufficient (rule exists but doesn't actually catch this case)?
+- **New class** — the bug doesn't match any registry entry. This is a candidate for a new evolution entry at B15. Name the class in snake_case (e.g., `time_zone_drift`, `null_default_regression`).
+- **Unclassifiable** — the bug is genuinely novel or one-off; not a recurring pattern. Note that explicitly so we don't over-name.
+
+**Trace the bug to its origin (regression check).** Use `git blame` on the root-cause code to find the commit that introduced it. Then check whether that commit traces back to a dokime ticket — by ticket ID in the commit message, by associated spec file (project convention varies — `specs/`, `docs/specs/`, or referenced in PR description), or by matching date against the ledger. Three outcomes:
+
+- **Origin is a dokime ticket** — record the originating ticket ID, the workflow version active at the time, and the spec file path. This bug is a *direct regression on a specific dokime ticket*. The audit question sharpens: which step of that ticket's pass should have caught this? Was a rule that now exists not present then, or did it exist and miss?
+- **Origin pre-dates dokime adoption** — record `origin_workflow: N` in the ledger row. The bug is unaudited from a dokime perspective; the workflow can claim no credit or blame.
+- **Origin unknown** — code was rewritten, history is squashed, or blame points to a non-feature commit (refactor, merge). Record `origin_workflow: unknown` and move on.
+
+This classification feeds the ledger row at B15 and (if new class or direct regression) a `/dokime:evolve` submission. The bug workflow is itself a peira against dokime — every bug is data on what the workflow caught, missed, or never claimed to catch. Direct regressions are the highest-value data: they tell us exactly which version of the workflow let exactly which class of bug through.
+
+**CHECKPOINT: Human confirms root cause diagnosis *based on experimental evidence* AND failure class classification. This is the most important checkpoint in the bug workflow — a wrong diagnosis means a wrong fix.**
 
 ---
 
@@ -543,6 +565,10 @@ Write a test that reproduces the bug. **This test should fail**, proving the bug
 - It fails because the code currently produces the *actual* (wrong) behavior
 - If the test passes, either the bug isn't what you think it is or the test isn't testing the right thing — go back to B4
 
+**Mutation-test the new test (strongly recommended).** Briefly mutate the production code in a way that should make the test fail. If the test still passes, it isn't discriminating against the bug you care about — strengthen the assertion or the setup. Restore the production code before continuing.
+
+**Beware tautological mocks.** When the test mocks infrastructure (storage, queues, cache, external services, auth) using the same hardcoded value the code under test uses, the test cannot fail for that value — the mock mirrors the code's blind spot. If the production code calls `Storage::disk("local")` and the test calls `Storage::fake("local")`, the test confirms the test, not the code. Either refactor to read from config and mock the config layer, or add an integration test against real infrastructure. See Rule 11.
+
 **CHECKPOINT: Failing test reviewed. Does it accurately reproduce the bug?**
 
 ---
@@ -573,6 +599,10 @@ Same as feature Step 11. Two-pass review:
 - Does the code follow the project's coding standards?
 - Are there security or performance concerns introduced by the fix?
 - Is the fix minimal — does it change only what's necessary?
+
+**Pass 3 — Test/code agreement (tautological mock check, see Rule 11):**
+- For the new test that mocks infrastructure: name every hardcoded value the test fixture and the production code share. If they share one, is that agreement structural (config-driven) or coincidental (both hardcoded)? Coincidental = tautological — refactor or integration-test.
+- Name a change to the production code that should make this test fail. If you cannot, the test isn't discriminating against the bug it was written for.
 
 Fix any issues found before proceeding.
 
@@ -681,6 +711,7 @@ The checkpoints exist because AI can be confidently wrong. Every phase gets huma
 8. **Ambiguities are the primary value** — if you only do one step well, make it Step 4 (features) or Step B4 (bugs)
 9. **Ask questions EARLY** — don't start coding with unresolved ambiguities
 10. **Verify completeness BEFORE shipping** — catch missing portions before QA sees it
+11. **Tautological mocks are a class of test that cannot fail** — when a test mocks infrastructure using the same hardcoded value as the code under test, the mock mirrors the code's blind spot. Mutation testing surfaces this; the structural fix is to refactor the code to read from config (and mock the config layer) or to integration-test against real infrastructure
 
 ---
 
@@ -759,6 +790,12 @@ The log stays with the workflow so future users (and future you) inherit the les
 | 2026-04-03 | LOG_CHANNEL=stderr not documented — wasted time checking wrong log file | Per-project logging setup should be in CLAUDE.md or spec file |
 | 2026-04-03 | Running formatter (Pint) without codesniffer (PHPCS) left structural issues uncaught — trailing commas, docblock annotations | Step 12 / B11 now explicitly requires running all quality tools, not just the formatter |
 | 2026-04-09 | Step 15 Completion Check passed on ICOV3-1069 but an acceptance criterion ("CoCard section above Fasteezy") was silently dropped because the work crossed two repos — the API PR only touched `getCsvHeaders()`, while the criterion required changes to `calc()`. Criterion was mentally checked off against the Admin PR that shipped new columns, not against the calc logic that actually groups the data. Winston caught it in QA on next pass. | Step 15 now requires mapping each acceptance criterion to **specific file(s) and method(s)** that implement it, not just checking if the criterion "feels done." When a criterion touches multiple repos, each repo's contribution must be named explicitly. Cross-repo criteria are a known failure mode of completion checking. |
+| 2026-04-24 | Mutation testing each new test surfaces tests that don't actually discriminate against the bug they were written for — caught two cases (a test that passed regardless of the fix because it tested a different invariant; tests covering redundant ground while leaving a real gap elsewhere). | Added "mutation-test new tests (strongly recommended)" guidance to Step 9 and B8 — the multi-bit version of the red step. |
+| 2026-04-24 | A test mocking `Storage::fake("local")` mirrored the production code's `Storage::disk("local")` hardcode; the test passed because the mock shared the bug. Shipped to production, caused user-visible data loss when the local filesystem was wiped on deploy. The workflow could not catch this class structurally — when the test and the code share the same blind spot, no internal contradiction surfaces for any process step to expose. | Added "tautological mocks" check to Step 9 / B8 (test writing) and named it as Rule 11. Generalizes beyond storage to any mockable infrastructure boundary (cache, queue, auth, external services, feature flags). |
+| 2026-04-24 | Without ticket-level outcome tracking, evolution entries are faith-based: we believe the workflow improves but have no way to test it. Bug tickets in particular are unaudited — each one is a peira against dokime, but the workflow didn't ask "did this come from a known failure class? Did the rule for that class fail to catch it?" | Added classification sub-step to B4 (Root Cause Analysis): cross-reference each bug against the Failure Class Registry; classify as known-class (and why the rule didn't catch it) or new class (candidate for new evolution entry). Created `data/ledger.md` with per-ticket schema and Failure Class Registry. Drafted spec for `/dokime:log-ticket` skill. |
+| 2026-04-24 | Visibility-only rules (Rule 11 and similar) need explicit prompt-level enforcement — naming the class isn't enough if engineers don't ask the question at the right moment. | Added Pass 3 to Step 11 / B10 code review: name shared hardcoded values between test and code; name a change to the production code that should make the test fail. Forces the recognition the Rule 11 abstraction depends on. |
+| 2026-04-24 | Evolution entries lacked structured metadata for failure-class tracking, detection method, or gap type — making it impossible to detect recurrence or measure rule stickiness across the corpus. | Updated `/dokime:evolve` skill to capture `failure_class`, `detection_method`, and `workflow_gap_type` fields. Optional but strongly preferred for failure observations; blank for positive observations. |
+| 2026-04-24 | Bug classification at B4 named the failure class but didn't trace bugs to their origin — losing the highest-value signal: which workflow version let which class through. | Added regression-check sub-step at B4: use `git blame` to find the introducing commit, cross-reference to a dokime ticket via commit message / spec file / ledger date. Three outcomes: dokime origin (record ticket + workflow version), pre-dokime origin, or unknown. Ledger schema extended with `origin_ticket`, `origin_spec_file`, `origin_workflow_version`. Direct regressions on specific dokime tickets are now the highest-priority data point in the corpus. |
 | 2026-04-09 | On ICOV3-1069 Pass 2, skipped B3 (Reproduce) and went straight from B2 (Understand) to B4 (Root Cause) because the missing CoCard branch was visible in code inspection. Rationalized as "I don't need to run it to confirm what I already know." Virgil caught it: *"Why did we skip B3?"* Failure mode: **clarity of diagnosis is not permission to skip reproduction**. When the code reading feels certain, that certainty is exactly the thing that makes you dangerous — it's the same failure mode as "jumping to implementation before tests," just earlier in the flow. Without local reproduction, B12 Verify has no anchor — you're comparing the fix against an *imagined* broken state, not an observed one. | B3 is non-negotiable regardless of how obvious the root cause looks in source. Added explicit anti-pattern to B3: "If you read the bug in code and feel certain, that is exactly when you most need to run it." The obviousness of the diagnosis is irrelevant to the reproduction requirement — if anything, it's a warning sign that you're about to skip a checkpoint. |
 | 2026-04-09 | I presented a root cause diagnosis to the human as a "does this look right?" checkpoint question without running an experiment to verify it. The human pushed back: "I am not a genie. We need to replicate or have some kind of experimental feedback to verify." I was presenting inference as diagnosis — skipping the experimental step that makes B4 a real checkpoint instead of a rubber stamp. | B4 now requires experimental falsification before the human checkpoint. State the hypothesis, state what would be observed if true vs false, design an experiment, run it, present evidence. Not "does this look right?" — "here is the evidence." Added anti-pattern to B4. |
 | 2026-04-09 | After forming a root cause hypothesis, I placed targeted console logs at four state-observation points (Vue watcher, click handler, form capture, diff request) and confirmed the exact divergence in under an hour. Static code tracing alone would have taken significantly longer and produced less confidence. | B4 now explicitly recommends placing targeted logs at state-observation points — the specific locations where internal state becomes visible — as the fastest path to definitive diagnosis once the code path is understood. |
