@@ -2,7 +2,7 @@
 
 **Author:** Virgil Anderson
 **Created:** February 2026
-**Last Updated:** April 3, 2026
+**Last Updated:** April 30, 2026
 **License:** All rights reserved. This workflow is the intellectual property of Virgil Anderson.
 
 ---
@@ -161,6 +161,10 @@ Log tradeoff evaluations to the spec file.
 - Check for shared components — who else uses them?
 - Look for similar implementations to follow as a pattern
 
+**Identify framework lifecycle dependencies:**
+- If the code under change reads from framework lifecycle state (Eloquent `$table`/`$exists`/attributes; Symfony container resolution; Rails ActiveRecord initialization; React component lifecycle; etc.), note it explicitly.
+- Service-level tests that go through normal hydration auto-populate this state and silently mask abstraction bugs — they catch only catastrophic regressions, not the latent class. Unit-level tests on factory-fresh / new-instance scenarios are required to discriminate. Carry this finding to Step 9 for test-design implications. Tagged class: `lifecycle_state_masking`.
+
 **Surface new ambiguities:**
 - Does existing code handle this differently than the ticket implies?
 - Does the codebase contradict the spec? If so, go back to Step 3
@@ -187,6 +191,10 @@ Based on patterns found, propose implementation approach:
 - State what this change intentionally does NOT do (scope boundaries)
 - List what tests will be written
 
+**Specialized agents at proposal time.** When the approach touches a domain with a registered specialized agent (authorization, data layer, MIS, workflow, test data, etc.), dispatch that agent now — not only at code-review time. The earliest cheap correction is during proposal, before any code is written: at Step 7 a course change is a one-line spec edit; at Step 11 it's a re-implementation.
+
+**Deliberate-state check.** If the approach proposes changes to deployment, infrastructure, or shared architectural state — anywhere outside the layer you own (deploy pipelines, server config, shared service architecture, team conventions) — first check whether the current state is deliberate. Sources: project CLAUDE.md, recent session logs, recent meeting transcripts, recent Slack on the topic. Proposing a "fix" for an intentional architectural choice creates friction without value. Different from the B2 reclassification trap (which catches "this bug is already resolved" claims); this catches "this state is a bug" claims about *deliberate* architectural choices. Tagged class: `deliberate_state_misclassified_as_bug`.
+
 **CHECKPOINT: Get human approval on approach before writing any code.**
 
 ---
@@ -196,13 +204,14 @@ Based on patterns found, propose implementation approach:
 **Start clean. Know what's broken before you touch anything.**
 
 1. If you aren't on a clean branch for the ticket create and checkout a fresh branch from the base branch (e.g., `develop`). Look at existing branch structure and follow it.
-2. Verify no uncommitted changes
-3. Run the full test suite before writing any code
-4. Log the results:
+2. **Verify branch sync.** Run `git log HEAD..origin/<base>` and confirm it's empty, or document the divergence in the spec. The baseline-vs-PR-diff signal silently degrades as base moves; surface drift now, not when drafting the PR. Tagged class: `baseline_drift`.
+3. Verify no uncommitted changes
+4. Run the full test suite before writing any code
+5. Log the results:
    - How many tests pass?
    - How many tests fail? Which ones?
    - Are there any skipped or incomplete tests?
-5. If tests are already failing, document them in the spec file as **pre-existing failures** — these are not your responsibility, but you need to know they exist so you don't waste time debugging them later
+6. If tests are already failing, document them in the spec file as **pre-existing failures** — these are not your responsibility, but you need to know they exist so you don't waste time debugging them later
 
 This is your baseline. After implementation, any new failures are yours. Any pre-existing failures are not. Without this step, you can't tell the difference.
 
@@ -224,9 +233,17 @@ Test names should read as sentences. If someone reads just the test names, they 
 
 If a test passes before you write the implementation, the test isn't testing anything — fix it.
 
-**Mutation-test new tests (strongly recommended).** For each new or changed test, briefly mutate the production code in a way that should make the test fail. If the test still passes, it isn't discriminating against the bug you care about — strengthen the assertion or the setup. Restore the production code before continuing. This is the multi-bit version of the red step: "did I see red once?" is one bit; "does this test discriminate against the mutation I care about?" is what catches false greens.
+**Mutation-test new tests (strongly recommended; required for refactor sentinels).** For each new or changed test, briefly mutate the production code in a way that should make the test fail. If the test still passes, it isn't discriminating against the bug you care about — strengthen the assertion or the setup. Restore the production code before continuing. This is the multi-bit version of the red step: "did I see red once?" is one bit; "does this test discriminate against the mutation I care about?" is what catches false greens.
 
-**Beware tautological mocks.** When a test mocks infrastructure (storage, queues, cache, external services, auth) using the same hardcoded value the code under test uses, the test cannot fail for that value — the mock mirrors the code's blind spot. Example: production code calls `Storage::disk("local")`, test calls `Storage::fake("local")`. Switching the production disk to a different value leaves the test passing. Either refactor the code to read from config and mock the config layer, or write an integration test against real infrastructure. Mutation testing exposes this directly. See Rule 11.
+**Refactor sentinels — mutation testing required, not recommended.** A *refactor sentinel* is a test that passes green against both the pre-refactor and post-refactor code (a regression sentinel against accidental behavior change). Refactor sentinels by definition cannot be discriminated against by a normal red→green cycle — there is no red moment in their lifecycle. Mutation testing is the only mechanism that proves they're not tautological. **Run the named mutation; do not accept hypothetical mutations.** Tagged class: `tautological_test` (refactor variant).
+
+**Beware tautological tests (Rule 11).** When the test fixture and the production code share a blind spot, no internal contradiction surfaces — the test cannot fail. Two common mechanisms:
+- **Value mismatch.** Test mocks infrastructure (storage, queues, cache, external services, auth, feature flags) using the same hardcoded value the code uses literally. Example: production calls `Storage::disk("local")`, test calls `Storage::fake("local")`. Switching the production disk to a different value leaves the test passing.
+- **Scope mismatch.** Test activates a flag, feature, or permission in a scope the production code doesn't check. Example: production calls `Feature::active("x")` in an authenticated user context (user-scoped), test activates the flag globally without user-scoping it. The flag check fails silently and the test passes for the wrong reason — the gate code is never evaluated.
+
+The structural fix in either case is to refactor the code to read from a config or scope layer the test can drive, or to integration-test against the real boundary. Mutation testing surfaces both. See Rule 11.
+
+**Test design under framework lifecycle dependencies.** If Step 6 flagged that the code under test reads framework lifecycle state, your test plan must include unit-level coverage on factory-fresh / new-instance scenarios. Service-level tests that go through normal hydration auto-populate the state and silently mask abstraction bugs. Both layers are usually needed: service tests confirm production paths still work; unit tests confirm the abstraction itself isn't broken. Tagged class: `lifecycle_state_masking`.
 
 **Parallel subagents:** If the plan from Step 7 identified truly independent sub-problems, dispatch separate agents to write tests for each simultaneously. Independent means: no shared state, no shared files, no interaction effects. If in doubt, do them sequentially — false independence creates merge conflicts and interaction bugs.
 
@@ -242,7 +259,7 @@ If a test passes before you write the implementation, the test isn't testing any
 - Continue until all tests pass
 - **Approach compliance**: Before presenting, compare what was built against what was approved in Step 7. Note any deviations and why.
 
-**Visual smoke test:** If the change affects UI, load it in the browser before proceeding. Confirm the output is in the right place, the right component, the right page. Code that passes tests but renders in the wrong location is not green — it's red in a way tests don't catch.
+**Visual smoke test.** If the change affects user-visible behavior on a UI surface — including changes to which state, count, list, or tile a record appears in — load it in the browser before proceeding. UI-behavior change includes side effects of service-layer code that surface in views, *even when no view file was edited*. Confirm the output renders in the right place, the right component, the right page. Code that passes tests but renders in the wrong location (or routes a record to the wrong tile) is not green — it's red in a way tests don't catch. Read this rule by spirit, not by letter: "I didn't touch a blade file" is not the question; "can the user see the difference?" is.
 
 **Parallel subagents:** Same rule as Step 8. If sub-problems are truly independent, dispatch agents in parallel. Each agent implements its sub-problem and runs its tests. Integrate and run the full suite after all agents complete.
 
@@ -264,11 +281,13 @@ If a test passes before you write the implementation, the test isn't testing any
 - Are there security concerns (injection, XSS, mass assignment, etc.)?
 - Are there performance concerns (N+1 queries, missing indexes, unnecessary loops)?
 
-**Pass 3 — Test/code agreement (tautological mock check, see Rule 11):**
-- For each new test that mocks infrastructure (storage, queues, cache, external services, auth, feature flags): name every hardcoded value the test fixture and the production code share. If they share one, is that agreement structural (driven by config or environment) or coincidental (both hardcoded)? Coincidental agreement = tautological mock — refactor or integration-test.
+**Pass 3 — Test/code agreement (tautological test check, see Rule 11):**
+- For each new test that mocks infrastructure (storage, queues, cache, external services, auth, feature flags): name every value *and scope* the test fixture and the production code share — both hardcoded values *and* scopes (user, team, role, request context). For each, is the agreement structural (driven by config or environment the test mocks) or coincidental (both hardcoded, or both ignoring scope)? Coincidental = tautological — refactor or integration-test against the real boundary.
 - For each new test: name a change to the production code that should make the test fail. If you cannot name one, the test isn't discriminating against the bug it was written for.
+- **Refactor sentinels** (tests green against both pre- and post-refactor code): the previous bullet is **required**, not recommended. Run the named mutation; do not accept hypothetical mutations.
+- **Setting-shaped surfaces** (admin checkboxes, toggles, thresholds, feature flags, env-driven config): for each, name (a) at least one consumer that reads the value and changes behavior, and (b) at least one test that exercises the *effect* on behavior, not just persistence. Persistence-only tests permit `unwired_admin_setting` regressions where the setting is structurally a no-op.
 
-**Specialized agents:** If the project has domain-specific coding agents (e.g., authorization experts, data layer experts, workflow experts, test data experts), dispatch them to review the changes in their area of expertise. Each agent reviews independently and reports findings. This catches domain-specific issues that a general review misses.
+**Specialized agents:** If the project has domain-specific coding agents (e.g., authorization experts, data layer experts, workflow experts, test data experts), dispatch them to review the changes in their area of expertise. Each agent reviews independently and reports findings. This catches domain-specific issues that a general review misses. **Note:** these agents should also have been dispatched at Step 7 (proposal time) — Pass 3 review is a second look, not a first one. If you skipped early dispatch, that's the cheaper miss to fix going forward.
 
 Fix any issues found before proceeding — changes made during quality review could introduce regressions, which is why regression tests come next.
 
@@ -291,6 +310,8 @@ Fix any issues found before proceeding — changes made during quality review co
 **Walk through each test scenario one at a time. Do not batch.**
 
 Verification catches what automated tests can't — **UI/behavior issues** (layout, interactions, real user flow) *and* **infrastructure/config issues** (unconfigured services, disk/S3 gaps, environment drift masked by `Storage::fake()` or similar). Both surface here.
+
+UI-behavior scope is broad: a service-layer change that affects which state, count, list, or tile a record appears in is a UI-behavior change even if no view file was edited. If the human user can see the difference, it's in scope here.
 
 1. Identify all test scenarios (happy path, edge cases, error conditions, composition). Present the full list for human approval before starting.
 
@@ -352,6 +373,7 @@ While the context is fresh — not as an afterthought.
 ## Step 16: Ship
 
 **PR Packaging (decide before drafting):**
+- **Re-verify branch sync.** Run `git log HEAD..origin/<base>` again. Baseline drift since Step 8 produces misleading diff output and noisy PRs — files you never touched will appear in `git diff origin/<base>` because base moved while you were working. If drift exists, merge or rebase before drafting. Tagged class: `baseline_drift`.
 - Is the commit history clean? Squash WIP / merge / fix-fix-fix noise if appropriate — reviewers read commits, not just the final diff.
 - Does the diff include infrastructure or preparatory changes that aren't part of this feature (schema dumps, `.env.testing` edits, unrelated refactors)? Consider splitting them into separate PRs — reviewer attention is finite, and mixed PRs are harder to review and revert.
 - Is the diff scoped to what a reviewer actually needs to see? Minimize noise.
@@ -436,7 +458,9 @@ If the ticket is missing reproduction steps, expected result, or actual result �
 - **Name the central problem** — what is the ONE thing that's broken? Name it before investigating.
 - Note any initial hypotheses about the cause, but don't commit to one yet
 
-**Reclassification trap:** If positive evidence suggests the bug is already resolved (e.g., logs show the system working in production), verify that the evidence matches the original report's *specific trigger* — same notification type, same program, same user role, same data conditions. Evidence from a different trigger proves a different code path works, not that the reported path works. "Twilio shows SMS working" doesn't close "badge awards aren't firing" — those are different award types on different code paths. Don't reclassify until evidence matches the report.
+**Reclassification trap (false-resolved direction).** If positive evidence suggests the bug is already resolved (e.g., logs show the system working in production), verify that the evidence matches the original report's *specific trigger* — same notification type, same program, same user role, same data conditions. Evidence from a different trigger proves a different code path works, not that the reported path works. "Twilio shows SMS working" doesn't close "badge awards aren't firing" — those are different award types on different code paths. Don't reclassify until evidence matches the report.
+
+**Symmetric trap (false-active direction) — historical fix in same corpus.** When a ticket is sourced from an older transcript, channel, or corpus (e.g., a training-session transcript, an old Slack thread, a stale RAG hit), scan that same source for *resolution* evidence before classifying as an active bug. The symptom narrative is often preserved alongside the fix narrative — checking only the symptom side carries forward already-fixed bugs as present-tense vulnerabilities. Before B3 reproduction, RAG-search the source corpus for the symptom plus terms like "fixed", "resolved", "reverted", "safeguard", "incident" — and check dates. If you find a fix narrative, verify with the reporter live before classifying as an active bug. Counterpart to the reclassification trap above (which catches false-resolved); this catches false-active. Tagged class: `reclassification_trap` (false-active direction).
 
 **CHECKPOINT: Get human confirmation that the understanding is correct before proceeding.**
 
@@ -495,6 +519,10 @@ Before adding any debug output, confirm:
 
 **Anti-pattern: "Does this look right?"** Do not present a root cause hypothesis to the human as a "does this look right?" question. That's asking the human to be a genie — to validate your inference without evidence. Present the hypothesis, the experiment you designed, and the evidence the experiment produced. The checkpoint is "here is the evidence," not "does this look right?"
 
+**Anti-pattern: AI-asserted library mechanism.** Any "library X does Y when Z" claim about library or framework internals (e.g., "webpack-dev-server reloads on WebSocket close", "React batches state updates here", "Laravel's Pennant scopes to user automatically") must be verified against actual library source — grep + read the relevant lines — before being relayed to the human or to stakeholders. Cheap to verify; expensive when wrong. The verification is one of the simplest peira available: stop, read the source, confirm. Without this rule, AI-generated mechanism claims propagate as if they were source-verified, leading to misdirected fix attempts and stakeholder messages that have to be retracted. Tagged class: `unverified_library_mechanism_claim`.
+
+**Discriminating diagnosis (Rule 12).** Before concluding the root cause and proceeding to B5, name a test — mutation or experiment — that should produce one observable result under the current theory and a *different* result under at least one named alternative theory. If the test confirms the theory, proceed. If it doesn't (or if no discriminating test can be named), the theory is incomplete and B4 continues. This generalizes Step 9 / B8's mutation-test rule from "is this *test* discriminating?" to "is this *diagnosis* discriminating?" Bug investigations that produce a coherent-looking single-mechanism theory at every iteration — each falsified by the next experiment — are exactly the failure mode this rule names. Tagged class: `non_discriminating_diagnosis`.
+
 **Classify the failure class (workflow audit).** With root cause in hand, cross-reference this bug against the Failure Class Registry in `~/Documents/Dokime/data/ledger.md` (or the project's local equivalent). Three possibilities:
 
 - **Known class** — the bug matches an existing entry. Note which evolution rule should have caught it. Then ask: was the rule violated (discipline gap), not applicable to this context (rule needs scope refinement), or insufficient (rule exists but doesn't actually catch this case)?
@@ -539,6 +567,10 @@ Collapsed version of feature Steps 5-7. Bugs are usually constrained by existing
 - State what this fix intentionally does NOT change (scope boundaries)
 - If multiple fix approaches exist, briefly name the alternatives and why you're recommending this one
 
+**Specialized agents at fix-proposal time.** When the proposed fix touches a domain with a registered specialized agent (authorization, data layer, MIS, workflow, test data, etc.), dispatch that agent now — not only at code-review time. At B6 a course change is a one-line spec edit; at B10 it's a re-implementation. Domain-specific agents catch corrections general review can't surface (e.g., "the dependency you're injecting is already reachable through an existing service — add a proxy method instead", "the upstream gate you're worried about is already in the console kernel"). The earliest cheap correction is here.
+
+**Deliberate-state check.** If the proposed fix would touch a layer outside the one you own (deploy pipelines, server config, shared service architecture, team conventions), check whether the current state is deliberate before recommending change. Sources: project CLAUDE.md, recent session logs, recent meeting transcripts, recent Slack on the topic. Different from the B2 reclassification trap (which catches "this bug is already resolved" claims); this catches "this state is a bug" claims about *deliberate* architectural choices. Tagged class: `deliberate_state_misclassified_as_bug`.
+
 **CHECKPOINT: Human approves the fix approach.**
 
 ---
@@ -548,10 +580,11 @@ Collapsed version of feature Steps 5-7. Bugs are usually constrained by existing
 Same as feature Step 8.
 
 1. Create and checkout a fresh branch from the base branch
-2. Verify no uncommitted changes
-3. Run the full test suite before writing any code
-4. Log results — passes, failures, skips
-5. Document pre-existing failures — these are not yours
+2. **Verify branch sync.** Run `git log HEAD..origin/<base>` and confirm it's empty, or document the divergence in the spec. The baseline-vs-PR-diff signal silently degrades as base moves; surface drift now, not when drafting the PR. Tagged class: `baseline_drift`.
+3. Verify no uncommitted changes
+4. Run the full test suite before writing any code
+5. Log results — passes, failures, skips
+6. Document pre-existing failures — these are not yours
 
 **CHECKPOINT: Human confirms baseline is established.**
 
@@ -567,7 +600,11 @@ Write a test that reproduces the bug. **This test should fail**, proving the bug
 
 **Mutation-test the new test (strongly recommended).** Briefly mutate the production code in a way that should make the test fail. If the test still passes, it isn't discriminating against the bug you care about — strengthen the assertion or the setup. Restore the production code before continuing.
 
-**Beware tautological mocks.** When the test mocks infrastructure (storage, queues, cache, external services, auth) using the same hardcoded value the code under test uses, the test cannot fail for that value — the mock mirrors the code's blind spot. If the production code calls `Storage::disk("local")` and the test calls `Storage::fake("local")`, the test confirms the test, not the code. Either refactor to read from config and mock the config layer, or add an integration test against real infrastructure. See Rule 11.
+**Beware tautological tests (Rule 11).** When the test fixture and the production code share a blind spot, no internal contradiction surfaces. Two common mechanisms:
+- **Value mismatch.** Test mocks infrastructure (storage, queues, cache, external services, auth, feature flags) using the same hardcoded value the code uses literally. Example: production calls `Storage::disk("local")`, test calls `Storage::fake("local")` — switching the production disk leaves the test passing.
+- **Scope mismatch.** Test activates a flag, feature, or permission in a scope the production code doesn't check. Example: production reads a Pennant flag user-scoped, test activates it globally — the gate code is never evaluated and the test passes for the wrong reason.
+
+Either refactor to read from a config or scope layer the test can drive, or integration-test against the real boundary. See Rule 11.
 
 **CHECKPOINT: Failing test reviewed. Does it accurately reproduce the bug?**
 
@@ -582,7 +619,7 @@ Write a test that reproduces the bug. **This test should fail**, proving the bug
 - **Approach compliance**: Compare the fix against what was approved in Step B6. Note any deviations and why.
 - **Check every link in the causal chain.** After the first observable change, don't stop. Trace the fix through every downstream step — from the trigger, through each intermediate state, to the final output. Partial success looks like success until you check the next link. (Example: Vue model clears correctly but `dataChange` payload still misses the field because programmatic updates don't fire DOM events — two different links in the same chain.)
 
-**Visual smoke test:** If the fix affects UI, load it in the browser before proceeding. Confirm the bug is visually resolved and the fix renders in the right place. A fix that passes tests but looks wrong is not green.
+**Visual smoke test.** If the fix changes user-visible behavior on a UI surface — including changes to which state, count, list, or tile a record appears in — load it in the browser before proceeding. UI-behavior change includes side effects of service-layer code that surface in views, *even when no view file was edited*. Confirm the bug is visually resolved and the fix renders in the right place. A fix that passes tests but looks wrong (or routes a record to the wrong tile) is not green. Read this rule by spirit, not by letter: "I didn't touch a blade file" is not the question; "can the user see the difference?" is. The pre-fix vs. post-fix visual contrast also anchors B12 — without it, you're verifying the fix against an *imagined* post-fix state.
 
 ---
 
@@ -600,9 +637,11 @@ Same as feature Step 11. Two-pass review:
 - Are there security or performance concerns introduced by the fix?
 - Is the fix minimal — does it change only what's necessary?
 
-**Pass 3 — Test/code agreement (tautological mock check, see Rule 11):**
-- For the new test that mocks infrastructure: name every hardcoded value the test fixture and the production code share. If they share one, is that agreement structural (config-driven) or coincidental (both hardcoded)? Coincidental = tautological — refactor or integration-test.
+**Pass 3 — Test/code agreement (tautological test check, see Rule 11):**
+- For the new test that mocks infrastructure (storage, queues, cache, external services, auth, feature flags): name every value *and scope* the test fixture and the production code share — both hardcoded values *and* scopes (user, team, role, request context). For each, is the agreement structural (config-driven, scope-driven) or coincidental (both hardcoded, or both ignoring scope)? Coincidental = tautological — refactor or integration-test against the real boundary.
 - Name a change to the production code that should make this test fail. If you cannot, the test isn't discriminating against the bug it was written for.
+- **Refactor sentinels** (tests green against both pre- and post-fix code): the previous bullet is **required**, not recommended. Run the named mutation; do not accept hypothetical mutations.
+- **Setting-shaped surfaces** (admin checkboxes, toggles, thresholds, feature flags, env-driven config) introduced or changed by the fix: name (a) at least one consumer that reads the value and changes behavior, and (b) at least one test that exercises the *effect* on behavior, not just persistence. Persistence-only tests permit `unwired_admin_setting` regressions.
 
 Fix any issues found before proceeding.
 
@@ -628,9 +667,11 @@ Same as feature Step 12.
 1. Follow the reproduction steps from B3 — the bug should no longer occur
 2. Verify the desired behavior from B5 is now the actual behavior
 3. Check the blast radius items from B6 — do they still work?
-4. If the fix changes user-facing behavior, walk through related workflows
+4. If the fix changes user-facing behavior — including side effects of service-layer code that surface in views (which state, count, list, or tile a record appears in) — walk through related workflows. Read by spirit, not by letter: "no view file edited" is not the question; "can the user see the difference?" is.
 
 **Do not batch. Test one scenario at a time.**
+
+**Discriminating-diagnosis recheck (Rule 12).** Before B14, restate the discriminating test you named at B4 and confirm the fix produced the predicted observable result. If the diagnosis was right, the fix should change behavior in the way the discriminator predicted — and not change behavior in the way an alternative theory would have predicted. If the predicted result didn't materialize, B4 was incomplete; loop back. Tagged class: `non_discriminating_diagnosis`.
 
 **On FAIL — same as feature workflow:** diagnose, write a failing test, fix, re-run suite, re-verify.
 
@@ -660,6 +701,7 @@ Same as feature Step 12.
 
 Same as feature Step 16.
 
+- **Re-verify branch sync.** Run `git log HEAD..origin/<base>` again. Baseline drift since B7 produces misleading diff output and noisy PRs. If drift exists, merge or rebase before drafting. Tagged class: `baseline_drift`.
 - PR description: summarize the bug, root cause, and fix
 - Include the reproduction test as evidence the bug won't recur
 - Generate QA testing instructions (reproduction steps + blast radius checks)
@@ -701,6 +743,8 @@ The checkpoints exist because AI can be confidently wrong. Every phase gets huma
 
 ## Rules
 
+**How to read these rules.** They are operational guidance, not a checklist of letters to satisfy. When a rule's scope is ambiguous in your specific case, **read by spirit, not by letter.** The cost of an unnecessary check is minutes; the cost of a skipped one is verifying the fix against an imagined state instead of an observed one. See the recurring `rule_literalism` entries in the Evolution Log (2026-04-09 "code inspection is not reproduction"; 2026-04-30 "UI-behavior scope") for cases where a rule's letter was followed and its spirit was missed — those are the failure mode this preface exists to prevent.
+
 1. **Every checkpoint requires human confirmation** — the human is the selection pressure
 2. **NEVER commit code** — human handles all git operations
 3. **Write tests BEFORE implementation** — red before green
@@ -711,7 +755,8 @@ The checkpoints exist because AI can be confidently wrong. Every phase gets huma
 8. **Ambiguities are the primary value** — if you only do one step well, make it Step 4 (features) or Step B4 (bugs)
 9. **Ask questions EARLY** — don't start coding with unresolved ambiguities
 10. **Verify completeness BEFORE shipping** — catch missing portions before QA sees it
-11. **Tautological mocks are a class of test that cannot fail** — when a test mocks infrastructure using the same hardcoded value as the code under test, the mock mirrors the code's blind spot. Mutation testing surfaces this; the structural fix is to refactor the code to read from config (and mock the config layer) or to integration-test against real infrastructure
+11. **Tautological tests are a class of test that cannot fail** — when the test fixture and the production code share a blind spot, no internal contradiction surfaces. Two common mechanisms: **value mismatch** — test mocks a hardcoded string the code uses literally (e.g., `Storage::fake("local")` mirroring `Storage::disk("local")`); **scope mismatch** — test activates a flag, feature, or permission in a scope the production code doesn't check (e.g., a Pennant flag activated globally while production reads it user-scoped). Mutation testing surfaces both. The structural fix is to refactor the code to read from a config or scope layer the test can drive, or to integration-test against the real boundary.
+12. **Diagnosis claims must be discriminating** — before concluding root cause or shipping a fix, name a test (mutation or experiment) that should produce one observable result under the current theory and a *different* result under at least one named alternative theory. If the test confirms the theory, proceed. If it doesn't — or if no discriminating test can be named — root cause analysis continues. Applies at the B4→B5 and B12→B14 transitions. Analogous to mutation-testing for tests, applied to the diagnosis itself.
 
 ---
 
@@ -805,6 +850,17 @@ The log stays with the workflow so future users (and future you) inherit the les
 | 2026-04-09 | ICOV3-1069 Pass 2 ran end-to-end cleanly through the full Bug Fix Workflow (B1–B15). One process violation (skipped B3, caught and reversed), one quality correction (magic strings → class constants at B8/B9, caught by Virgil), zero iterative debugging, zero rework. Clean-pass characteristics: diagnosis visible in source, pattern precedent already in codebase (PPSS), blast radius small and bounded, B13 Document was near-zero because docblocks were written inline during B9 Green, B10/B11 collapsed cleanly because the full suite ran without regressions on the first attempt. **Meta-observation worth logging separately:** both evolution-log entries from earlier the same day (Step 15 cross-repo completion rule + B3 "code inspection is not reproduction" anti-pattern) were operationally useful hours later — the cross-repo rule drove the B14 completion mapping, and the B3 anti-pattern almost repeated itself in the same pass. | No workflow changes needed — this is dokime running in its "well-formed inputs" mode. Documented as evidence that (a) the ceremony scales down cleanly on well-scoped bugs: it still surfaces an architecture decision at B8/B9 (const refactor), still maps acceptance criteria across repos at B14, still produces ship-ready PR drafts at B15 — value is proportional to the risk of silent errors, not proportional to lines of code changed; and (b) the Evolution Log is *operational*, not archival, on an active project — lessons written in the morning can save work the same afternoon. A workflow doc that lives on a shelf is just documentation; one whose lessons compound within the same session is a tool. |
 | 2026-04-13 | A bug was reclassified from "open" to "resolved" based on a single positive Twilio log entry for a different program + different award type than the one originally reported. Shipped a symptom-level fix based on a true bug found during code inspection (wrong preference-key check), then closed the loop. Bug recurred in QA the next week because the fix didn't address the reported symptom — the symptom was caused by missing env config, not the preference-key bug. Category confusion (different award type) masqueraded as resolution. Confused "a true bug I found in the file" with "the root cause of the observed symptom." *Submitted via `/dokime:evolve` — first entry from the evolution feedback loop.* | B4 now includes isolation test (step 7): "Would this fix, by itself, produce the observed behavior if applied in isolation?" Bugs found during inspection are evidence, not diagnosis. B2 now includes reclassification trap: when positive evidence suggests a bug is resolved, verify the evidence matches the original report's specific trigger (notification type, program, user role). Evidence from a different trigger proves a different code path works. |
 | 2026-04-24 | The kill discipline was named in methodology ("kill honestly") but not operationalized — no machinery for *making* kills happen. Rules accumulated as ceremony; sunk-cost and over-coverage bias prevented removal. Without explicit kill mechanics, the workflow had generation, articulation, tracking, and testing but no closing action when reality said no. | Added Killed Rules / Steps / Metrics section below the Evolution Log. Kill criteria specified per artifact type (Rule / Step / Process metric). Kill action specified (delete the line, log the kill, bump version). Reversibility preserved — original entries stay in Evolution Log; kill entries reference them. Companion Kill Queue lives in the local ledger as the running list between quarterly reviews; Kill Log here records committed actions. Closes the variation→selection→retention loop the workflow had been claiming but not executing on its own rules. |
+| 2026-04-30 | A bug ticket sourced from an older training-session transcript framed a historical vulnerability as a present-tense bug. Three B3 reproduction-attempt tests all showed the system was correctly handling the described attack vectors. RAG search of the same source corpus revealed a December 2025 incident (real financial loss) had been resolved same-day by reverting the offending commit + a follow-on safeguard pipeline. The symptom narrative was preserved in the transcripts; the fix narrative was preserved alongside it but was not checked at B2. Reporter confirmed live: bug is fixed. The 3 reproduction-attempt tests became regression sentinels instead of becoming a wasted day. The workflow surfaced the *absence* of a bug plus locked in safeguards against its return — value was in the ceremony, not in shipping a fix. *Submitted via `/dokime:evolve` 2026-04-29.* | B2 now has a symmetric reclassification trap entry: when a ticket is sourced from an older transcript / channel / corpus, scan the same source for *resolution* evidence (terms like "fixed", "resolved", "reverted", "safeguard", "incident") before classifying as an active bug. Counterpart to the existing 2026-04-13 entry (false-resolved direction); this is the false-active direction. Tagged class: `reclassification_trap` (extended to cover both directions). |
+| 2026-04-30 | Step 8 established a clean 226-test baseline. Six steps later at Step 16, `git diff origin/qa --stat` showed files I never touched (StatementService.php, MigrateProgramsService.php, etc.) because origin/qa had moved 4 commits ahead during the day. The 12-file PR appeared as a 13-file diff with hundreds of lines of unrelated noise until the branch was merged with current qa. The baseline-vs-PR-diff signal silently degraded as the workflow progressed; a sync check at Step 8 would have surfaced this proactively, and a re-check at Step 16 would have caught it before it confused the deliverable. *Submitted via `/dokime:evolve` 2026-04-29.* | Added explicit `git log HEAD..origin/<base>` sync check to Step 8 / B7 (establish baseline) and Step 16 / B15 (PR packaging). Surfaces drift at both ends of the workflow. New failure class: `baseline_drift` (structural). |
+| 2026-04-30 | At Step 9 in a refactor (replacing one implementation with another), 17 of 30 new tests were green against current production code AND the new implementation. They were intended as regression sentinels. Per the workflow rule "if a test passes before you write the implementation, it isn't testing anything," this should have triggered scrutiny — but I claimed mutation tests would discriminate without running them. The user challenged: "if the test always passes then it's kind of worthless." When I actually mutated the production code, several tests indeed didn't fail — confirming the user's instinct. The workflow's "strongly recommended" mutation testing was treated as optional. *Submitted via `/dokime:evolve` 2026-04-29.* | Promoted mutation testing in Step 9 from strongly-recommended to **required for refactor sentinels** — tests green against both pre- and post-refactor code. Refactor sentinels by definition have no red→green discriminator in their lifecycle; mutation testing is the only mechanism that proves they're not tautological. Step 11 / B10 Pass 3 updated: hypothetical mutations don't count — run them. Tagged class: `tautological_test` (refactor variant). |
+| 2026-04-30 | A trait being refactored had a latent bug (raw `$this->table` property access — empty on factory-fresh instances, populated only when models are loaded via Eloquent query hydration). Production code paths always go through query hydration, so the bug never surfaced in production. Service-level tests using `Model::where(...)->get()` also went through query hydration and silently fixed the bug at runtime — so a service-level integration test could not reproduce or discriminate against the trait bug, only against catastrophic future regressions. Unit-level tests using factory-fresh instances WERE able to discriminate. *Submitted via `/dokime:evolve` 2026-04-29.* | Step 6 (codebase analysis) now includes "Identify framework lifecycle dependencies" — when the refactor target reads from framework lifecycle state (Eloquent `$table`/`$exists`/attributes; Symfony container resolution; Rails ActiveRecord initialization; React lifecycle), note it explicitly. Step 9 now distinguishes service-level integration tests (production paths, may auto-populate state) from unit-level tests on factory-fresh instances (can discriminate against abstraction bugs). Both layers usually needed. New failure class: `lifecycle_state_masking` (structural — same family as `tautological_test` but mechanism is path-sharing, not value/scope-sharing). |
+| 2026-04-30 | An "Enable automatic retry" admin checkbox persisted in DB and rendered in UI but no decision-making code consumed it — `isEnabled()` was read only by the admin form read-back; no retry-decision code consulted it. QA reproduced the symptom (failures landing in Pending Sync regardless of toggle). Direct regression on a specific dokime ticket whose origin commit predates the 2026-04-24 Pass 3 review rule. The Pass 3 check ("name a change to the production code that should make this test fail") applied to the setting-persistence test would have surfaced the gap — no test verifies the setting *affects* behavior. Generalizes beyond MIS context: any admin-configurable setting added without a corresponding behavior-effect test is a candidate. *Submitted via `/dokime:evolve` 2026-04-30.* | Step 11 / B10 Pass 3 extended with a "setting-shaped surfaces" check: for each admin-configurable surface (checkbox, toggle, threshold, feature flag, env-driven config) introduced or changed, name (a) at least one consumer that reads the value and changes behavior, and (b) at least one test that exercises the *effect* on behavior, not just persistence. New failure class: `unwired_admin_setting` (structural). |
+| 2026-04-30 | An existing test asserting "widget hidden for reviewer role" passed for the wrong reason. The test setup activated a Laravel Pennant feature flag without user-scoping it to the reviewer test user. Production code `Feature::active()` ran in the authenticated user context and short-circuited to false because the user-scoped flag was never activated — the role gate was never evaluated. Test passed because the flag check failed, not because the role gate worked. Same structural pattern Rule 11 names for infrastructure mocks (storage, queue, cache fakes), but with a different mechanism: scope mismatch instead of value mismatch. Caught only because a parallel new test in the same file mirrored the same setup and was flagged at red-step (passed without the production fix in place); investigation revealed the existing reviewer test had been tautological since written. *Submitted via `/dokime:evolve` 2026-04-30.* | Generalized Rule 11 from "tautological mocks" (value-mismatch only) to "tautological tests" (value mismatch *and* scope mismatch). Pass 3 of code review (Step 11 / B10) now asks for shared values *and* shared scopes (user, team, role, request context). Synced Step 9 / B8 wording with Step 11 Pass 3 (feature flags now listed in both). Plugin version bumped to 1.4.0 — Rule 11 is public-facing. New failure class registered as `tautological_test` (umbrella) with `tautological_mock` (value-mismatch) as the original instance and the Pennant case as the scope-mismatch instance. |
+| 2026-04-30 | Dispatching a domain-specific expert agent at B6 (Blast Radius and Fix Proposal) caught two real corrections that general review would not have produced: (1) the proposed fix added a constructor parameter to a service, but the expert pointed out that the necessary dependency was already reachable via an existing injected service — adding a thin proxy method on the existing service eliminated a 10-site test fan-out and respected SRP boundaries; (2) the expert flagged that the production scheduler was already gated upstream in the console kernel, meaning half of the bug was defense-in-depth for direct invocation paths rather than a separate live production bug — sharpening the PR description framing materially. Both corrections required domain-specific code knowledge a general review would not have surfaced. *Submitted via `/dokime:evolve` 2026-04-30.* | Step 7 / B6 now explicitly recommend dispatching specialized agents at proposal time, not only at code-review time. The earlier the dispatch, the cheaper the correction: at proposal a course change is a one-line spec edit; at code review it's a re-implementation. Step 11 / B10 Pass 3 also notes that late dispatch is a second look, not a first one — if early dispatch was skipped, that's the cheaper miss to fix going forward. |
+| 2026-04-30 | B9 visual smoke test ("If the fix affects UI, load it in the browser before proceeding") was almost skipped for a fix that touched zero view files. The fix was service-layer code only. But the user-visible effect was which dashboard tile a record landed in (Pending Sync vs. Failed) — a UI behavior change despite no view file edits. Reading the rule literally as "if you edited a blade file" was the trap. The human caught it ("did we skip the UI verification step?") and the resulting smoke test produced real visual evidence (pre-fix vs. post-fix course state contrast) that anchored B12 verification. Skipping would have left B12 verifying the fix against an *imagined* post-fix state. Same class as the 2026-04-09 "code inspection is not reproduction" anti-pattern at B3 — both are cases where the engineer literalizes a rule's wording and rationalizes skipping a checkpoint that the rule's spirit required. *Submitted via `/dokime:evolve` 2026-04-30.* | Reworded B9 / Step 10 / B12 / Step 13 visual-smoke-test scope: "user-visible behavior on a UI surface — including changes to which state, count, list, or tile a record appears in. UI-behavior change includes side effects of service-layer code that surface in views, even when no view file was edited." Added a Rules-section preface ("How to read these rules") establishing read-by-spirit-not-by-letter as the meta-principle. New failure class: `rule_literalism` (discipline / meta) — recurring pattern across 2026-04-09 (B3) and 2026-04-30 (B9). |
+| 2026-04-30 | I asserted webpack-dev-server's behavior ("WebSocket close handler calls `window.location.reload()`") to the human as the bug's mechanism, and the human passed that explanation up to a stakeholder before I had verified it against the actual library source. When the human pushed back later with "how can we confirm" — a B4 discipline question — I read the actual webpack-dev-server v4 source bundled in the production bundle and discovered the close handler does NOT call reload at all (it only logs "Disconnected!" and reconnects). The reload is triggered by a different path entirely (hash-mismatch on reconnect via reloadApp). This was the second time in the session that the human's "how can we confirm" question caught a confidently-asserted-but-unverified claim from me. *Submitted via `/dokime:evolve` 2026-04-30.* | B4 / B6 now include explicit "AI-asserted library mechanism" anti-pattern: any "library X does Y when Z" claim about library or framework internals must be verified against actual library source (grep + read) before being relayed to the human or to stakeholders. Cheap to verify; expensive when wrong. New failure class: `unverified_library_mechanism_claim` (discipline; AI-specific). Connects to the Paulson 2026 case study — *do the worrying the LLM can't*. |
+| 2026-04-30 | I framed the bug's apparent root cause ("dev-mode bundle on production") as something the deployment team should "fix," and drafted Slack/Jira messages framing it as a misconfiguration. The human pointed me at a team transcript from the previous day's tech heartbeat meeting where the dev-mode-on-prod arrangement was discussed as deliberate architecture (in transition to build-based serving on a separate roadmap). The framing was wrong: the team's existing state was an intentional choice with known tradeoffs, not a mistake to correct. Recommending changes to it as "fixes" without first checking whether it's deliberate would have created friction. *Submitted via `/dokime:evolve` 2026-04-30.* | Step 7 / B6 now include a deliberate-state check: before proposing changes to deployment, infrastructure, or shared architectural state (anywhere outside the layer you own), check whether the current state is deliberate. Sources: project CLAUDE.md, recent session logs, recent meeting transcripts, recent Slack on the topic. Different from the B2 reclassification trap (which catches "this bug is already resolved" claims); this catches "this state is a bug" claims about *deliberate* architectural choices. New failure class: `deliberate_state_misclassified_as_bug` (discipline). |
+| 2026-04-30 | Diagnosis went through three iterations on the same bug, each producing a coherent-looking single-mechanism theory that fit the evidence at the time but turned out to be wrong or incomplete. Iteration 1: "WebSocket close triggers reloadApp" — falsified by bundle source read. Iteration 2: "dev-mode bundle weight is too heavy for iOS" — falsified by Test B (production build still reloaded). Iteration 3: "carousel autoplay continuous activity is the trigger" — confirmed correct by Test C (dev mode + autoPlay=false stable). At each iteration I was confident enough to propose moving forward (PR shape, deploy handoff, etc.). Each iteration was advanced only because the human pushed for one more discriminating experiment. *Submitted via `/dokime:evolve` 2026-04-30.* | Added Rule 12: "Diagnosis claims must be discriminating" — before concluding root cause or shipping a fix, name a test (mutation or experiment) that should produce one observable result under the current theory and a *different* result under at least one named alternative theory. If the test confirms the theory, proceed. If it doesn't (or no discriminating test can be named), B4 continues. Generalizes Step 9 / B8's mutation-test rule from "is this *test* discriminating?" to "is this *diagnosis* discriminating?" Applies at B4→B5 and B12→B14 transitions. New failure class: `non_discriminating_diagnosis` (discipline). |
 
 When a Rule, step, sub-step, or process metric is removed because it didn't earn its keep, log it here with a reference to the original Evolution Log entry that introduced it. The original entry stays in place (history is preserved); the kill entry references it. If a killed item is later revived because the class it protected against returns, log a new Evolution Log entry referencing both the original and the kill.
 
