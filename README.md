@@ -33,6 +33,8 @@ claude plugin install dokime --scope project
 | Skill | Description |
 |-------|-------------|
 | `/dokime:workflow` | Run the full Dokime development workflow on a task or ticket |
+| `/dokime:review` | Run a Dokime code review on a PR branch — verdicts each acceptance criterion, runs Pass 3 (Rule 11, Rule 12, specialized agents), filters issues by confidence, produces Bitbucket-flavored inline-comment blocks |
+| `/dokime:evolve` | Submit a workflow lesson learned for review — captures what the workflow caught or missed in a session so the maintainer can promote it across all users |
 | `/dokime:update` | Pull the latest version and reinstall the plugin |
 | `/dokime:version` | Show installed version and check for updates |
 
