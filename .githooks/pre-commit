@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Block commits that leave the plugin version inconsistent across its three
+# sources of truth. See bin/check-version and RELEASING.md.
+exec "$(git rev-parse --show-toplevel)/bin/check-version"

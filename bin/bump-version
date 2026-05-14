@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# The release ritual. Updates the plugin version in all three sources of
+# truth at once — VERSION, plugin.json, marketplace.json — so they cannot
+# drift. Through v1.6.0 the "Bump to X" ritual only touched VERSION; this
+# script exists so that mistake is no longer possible to make by hand.
+#
+# Usage: bin/bump-version <version>   (e.g. bin/bump-version 1.7.0)
+# Requires: jq
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+new_version="${1:-}"
+
+if [[ -z "$new_version" ]]; then
+  echo "Usage: bin/bump-version <version>   (e.g. bin/bump-version 1.7.0)" >&2
+  echo "Current version: $(cat VERSION)" >&2
+  exit 1
+fi
+
+if [[ ! "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "✗ '$new_version' is not a semver version (expected MAJOR.MINOR.PATCH)" >&2
+  exit 1
+fi
+
+old_version=$(cat VERSION)
+
+printf '%s\n' "$new_version" > VERSION
+
+tmp=$(mktemp)
+jq --arg v "$new_version" '.version = $v' .claude-plugin/plugin.json > "$tmp"
+mv "$tmp" .claude-plugin/plugin.json
+
+tmp=$(mktemp)
+jq --arg v "$new_version" '.plugins[0].version = $v' .claude-plugin/marketplace.json > "$tmp"
+mv "$tmp" .claude-plugin/marketplace.json
+
+echo "✓ bumped $old_version → $new_version across VERSION, plugin.json, marketplace.json"
+echo "  review the diff, then commit."

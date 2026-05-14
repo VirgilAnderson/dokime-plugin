@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Verify the plugin version is consistent across all three sources of truth.
+# Exits non-zero (with a diff) if VERSION, plugin.json, and marketplace.json
+# disagree. Runs as the pre-commit hook; also safe to run by hand.
+# Requires: jq
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+version_file=$(cat VERSION)
+plugin_json=$(jq -r '.version' .claude-plugin/plugin.json)
+marketplace_json=$(jq -r '.plugins[0].version' .claude-plugin/marketplace.json)
+
+if [[ "$version_file" == "$plugin_json" && "$version_file" == "$marketplace_json" ]]; then
+  echo "✓ version consistent: $version_file"
+  exit 0
+fi
+
+echo "✗ version drift detected:" >&2
+echo "    VERSION                          $version_file" >&2
+echo "    .claude-plugin/plugin.json       $plugin_json" >&2
+echo "    .claude-plugin/marketplace.json  $marketplace_json" >&2
+echo "" >&2
+echo "  Run bin/bump-version <version> to sync all three." >&2
+exit 1
