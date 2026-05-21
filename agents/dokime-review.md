@@ -240,12 +240,14 @@ For each newly introduced abstraction, class hierarchy, generic, callback chain,
 
 Comments here are usually `Consider:` or `Optional:` severity unless the complexity rises to a blocker level (e.g., a new framework introduced just to do one thing).
 
+**Cross-check — dead parameter forcing a degraded path.** An unwired parameter (threaded through helpers but never supplied by any caller) is usually a complexity `Consider:`. But before scoring it, trace what the function does *without* it: if the parameter represents the correct data source and its absence forces a fallback to a different, fragile source — global store state, a default value, a broader query — the dead param is not a complexity nit, it is a functionality bug. The fallback silently produces wrong output (e.g. lot count instead of the sum of per-lot quantities). Escalate from complexity-`Consider:` to functionality-`Blocker:` and route the finding through R4-A. Tagged class: `unwired_param_forces_degraded_path`.
+
 ### R4-C: Tests (Pass 3 Rule 11 & Rule 12)
 
 Apply the existing Pass 3 from `agents/dokime.md` to the PR's new tests:
 
 - **Tautological mocks (value mismatch):** For each new test that mocks infrastructure (storage, queues, cache, external services, auth, feature flags) — name every hardcoded value the test fixture and the production code share. Is the agreement structural (driven by config the test mocks) or coincidental (both hardcoded)? Coincidental = tautological.
-- **Tautological tests (scope mismatch):** Same as above, but for shared scopes (user, team, role, request context). The Pennant case: `Feature::active()` ran in a different user context than the test fixture activated; the role gate was never evaluated and the test passed for the wrong reason.
+- **Tautological tests (scope mismatch):** Same as above, but for shared scopes (user, team, role, request context). The Pennant case: `Feature::active()` ran in a different user context than the test fixture activated; the role gate was never evaluated and the test passed for the wrong reason. A "no scope-mismatch risk" verdict is valid only if it names three concrete scopes and confirms they agree: the scope production *reads*, the scope the *test* drives, and the scope the production *enable path writes*. A no-risk conclusion reached without naming all three is itself the failure — flag it.
 - **Discriminating tests:** For each new test, name a change to the production code that should make the test fail. If you cannot name one (without running the mutation), flag it. Refactor sentinels (tests green against both pre- and post-refactor code) are required to be mutation-tested; hypothetical mutations don't count.
 - **Setting-shaped surfaces:** For each new/changed admin toggle, threshold, feature flag, env config, or checkbox — name (a) at least one consumer that reads the value and changes behavior, and (b) at least one test that exercises the *effect* on behavior, not just persistence. Persistence-only tests permit `unwired_admin_setting` regressions.
 - **Lifecycle state masking:** If the diff touches code that reads from framework lifecycle state (Eloquent `$table`/`$exists`/attributes; Symfony container; Rails ActiveRecord; React lifecycle), check whether new tests use factory-fresh instances or only hydrated ones. Hydrated-only tests silently mask abstraction bugs.
@@ -309,6 +311,8 @@ For each issue produced by R4-AC + R4-A through R4-F, score 0-100 using the Anth
 **Score by dispatching a separate Haiku-class subagent per issue** with: (a) the PR diff, (b) the issue description and source, (c) the project's CLAUDE.md (if present). Ask for a single number and a one-sentence justification.
 
 **Filter** issues with score below the threshold (default 80). The threshold is shown at R1; the human can override.
+
+**R4-AC verdict comments are exempt from the confidence floor.** A `Partial` or `Missing` AC verdict always surfaces as its inline `Blocker:` comment regardless of confidence score — R4-AC's contract is "no silent partials." The confidence score still runs and is shown alongside the verdict — it annotates *how sure* the reviewer is the AC is unmet — but it never suppresses the comment. Filtering a borderline-confidence Partial AC is the exact `ac_conformance_drift` failure this skill exists to prevent. The floor applies only to R4-A through R4-F findings.
 
 **Discipline.** Do not lower the threshold to "get more findings." If the threshold filters everything out, that is itself a signal — either the PR is genuinely clean or the review passes didn't surface the real issue (in which case relaxing the threshold won't help; rerun with different focus).
 
@@ -446,6 +450,7 @@ The review passes are calibrated to surface these classes. New classes get added
 | `unwired_admin_setting` | "Enable automatic retry" toggle with no consumer (v1.4.0) | R4-C |
 | `silent_failure` | Generalized from pr-review-toolkit's silent-failure-hunter | R4-D |
 | `untested_change` | Long-standing project rule; explicit at R4-C | R4-C |
+| `unwired_param_forces_degraded_path` | explicitListings threaded but never supplied; forced global-store fallback (v1.6.0) | R4-B |
 | `unverified_library_mechanism_claim` | webpack-dev-server WebSocket-close misclaim (v1.4.0) | R4-A — when PR description claims library behavior |
 | `deliberate_state_misclassified_as_bug` | Dev-mode-on-prod was deliberate architecture (v1.4.0) | R4-A — when PR purports to "fix" infrastructure |
 | `bad_cl_description` | Google eng-practices "Writing Good CL Descriptions" | R1 |
