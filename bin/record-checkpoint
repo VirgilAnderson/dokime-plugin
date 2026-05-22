@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Append one checkpoint-outcome record to the dokime v2 measurement store.
+#
+# Part of component B (dokime v2). The dokime workflow calls this at each
+# checkpoint — see the "Recording checkpoint outcomes" directive in
+# agents/dokime.md. The helper owns everything that must be reliable:
+# store-path resolution, timestamping, schema-conforming JSON, valid append.
+#
+# Usage: record-checkpoint <run_id> <ticket_id> <step> <outcome> [note]
+#   outcome ∈ approved-clean | approved-with-changes | reopened
+#
+# Store path resolves by precedence:
+#   $DOKIME_MEASUREMENT_STORE
+#   → measurement_store_path in ./.claude/dokime-config.json
+#   → ~/.dokime/measurements/   (default)
+#
+# Requires: jq
+set -euo pipefail
+
+run_id="${1:-}"
+ticket_id="${2:-}"
+step="${3:-}"
+outcome="${4:-}"
+note="${5:-}"
+
+if [[ -z "$run_id" || -z "$ticket_id" || -z "$step" || -z "$outcome" ]]; then
+  echo "usage: record-checkpoint <run_id> <ticket_id> <step> <outcome> [note]" >&2
+  exit 2
+fi
+
+case "$outcome" in
+  approved-clean | approved-with-changes | reopened) ;;
+  *)
+    echo "record-checkpoint: invalid outcome '$outcome'" \
+         "(expected approved-clean | approved-with-changes | reopened)" >&2
+    exit 2
+    ;;
+esac
+
+# Resolve the store directory.
+store=""
+if [[ -n "${DOKIME_MEASUREMENT_STORE:-}" ]]; then
+  store="$DOKIME_MEASUREMENT_STORE"
+elif [[ -f ./.claude/dokime-config.json ]]; then
+  store="$(jq -r '.measurement_store_path // empty' ./.claude/dokime-config.json)"
+fi
+if [[ -z "$store" ]]; then
+  store="$HOME/.dokime/measurements"
+fi
+store="${store/#\~/$HOME}"   # expand a leading ~ from config
+
+mkdir -p "$store"
+file="$store/checkpoint-outcomes.jsonl"
+timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# Build the record. `note` is omitted entirely when empty.
+if [[ -n "$note" ]]; then
+  record="$(jq -nc \
+    --argjson schema_version 1 \
+    --arg run_id "$run_id" --arg ticket_id "$ticket_id" \
+    --arg step "$step" --arg outcome "$outcome" \
+    --arg timestamp "$timestamp" --arg note "$note" \
+    '{schema_version: $schema_version, run_id: $run_id, ticket_id: $ticket_id, step: $step, outcome: $outcome, timestamp: $timestamp, note: $note}')"
+else
+  record="$(jq -nc \
+    --argjson schema_version 1 \
+    --arg run_id "$run_id" --arg ticket_id "$ticket_id" \
+    --arg step "$step" --arg outcome "$outcome" \
+    --arg timestamp "$timestamp" \
+    '{schema_version: $schema_version, run_id: $run_id, ticket_id: $ticket_id, step: $step, outcome: $outcome, timestamp: $timestamp}')"
+fi
+
+printf '%s\n' "$record" >> "$file"

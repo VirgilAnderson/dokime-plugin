@@ -53,6 +53,28 @@ The spec file captures **decisions**, not just requirements. "Chose X because Y.
 
 ---
 
+## Recording Checkpoint Outcomes
+
+dokime records what each run produces, so the workflow can be measured against its own claims (the measurement store).
+
+**At every `CHECKPOINT` in this workflow — Feature or Bug — once the human has resolved it, record the outcome.** Call the helper:
+
+```
+record-checkpoint <run_id> <ticket_id> <step> <outcome> [note]
+```
+
+- `run_id` and `ticket_id` — from the spec file header (`run_id` is minted at Step 1).
+- `step` — the checkpoint's step, e.g. `Step 4` or `B4`.
+- `outcome` — classify the resolution as exactly one of:
+  - `approved-clean` — the checkpoint passed with no change to the step's output.
+  - `approved-with-changes` — it passed, but the human's response caused a change to the step's output before it passed (an added acceptance criterion, a corrected decision, a late-surfaced ambiguity).
+  - `reopened` — the checkpoint did not pass; the step's work returns for rework.
+- `note` — optional; what changed (for `approved-with-changes`) or why it was reopened.
+
+The helper resolves the store path itself (`$DOKIME_MEASUREMENT_STORE` → `measurement_store_path` in `./.claude/dokime-config.json` → default `~/.dokime/measurements/`) and guarantees a schema-conforming record — the dev's only job is to *call* it at each checkpoint. Recording is **instrumentation, never a gate**: if the helper is not installed (an older plugin), skip recording and proceed.
+
+---
+
 ## Step 1: Capture Specs
 
 - **Resume vs. start.** Before creating the spec file, check whether one already exists for this ticket. If a spec file is found — especially with a feature branch carrying committed work — the workflow is being *resumed*, not started: do not restart at Step 1. Read the spec, determine the last completed step it records, and resume from there. If the spec records no clear resume point, ask the human where to pick up. Tagged class: `workflow_resume_unhandled`.
@@ -61,6 +83,7 @@ The spec file captures **decisions**, not just requirements. "Chose X because Y.
 - Create the spec file
 - Write to the spec file:
   - Task ID and title
+  - Run ID — `<ticket-id>@<ISO-8601 start timestamp>` (e.g. `DKV2-T2@2026-05-22T16:00:00`); keys this run's checkpoint-outcome records — see *Recording Checkpoint Outcomes*
   - Full requirements/description
   - Acceptance criteria
   - Constraints (performance, backward compatibility, deployment)
