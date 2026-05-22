@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Append one escaped-ambiguity record to the dokime v2 measurement store.
+#
+# Part of component B (dokime v2). The dokime workflow calls this at Step B4
+# when a bug's root cause is found to be an ambiguity an earlier Step 4 / B5
+# should have surfaced — see the escaped-ambiguity sub-step in agents/dokime.md.
+#
+# Usage: record-escaped-ambiguity <run_id> <ticket_id> <origin_ticket_id> <origin_step> <description>
+#   origin_ticket_id / origin_step may be the literal `unknown` when the
+#   originating ticket cannot be identified — record it anyway.
+#
+# Store path resolves by precedence:
+#   $DOKIME_MEASUREMENT_STORE
+#   → measurement_store_path in ./.claude/dokime-config.json
+#   → ~/.dokime/measurements/   (default)
+#
+# Requires: jq
+set -euo pipefail
+
+run_id="${1:-}"
+ticket_id="${2:-}"
+origin_ticket_id="${3:-}"
+origin_step="${4:-}"
+description="${5:-}"
+
+if [[ -z "$run_id" || -z "$ticket_id" || -z "$origin_ticket_id" \
+      || -z "$origin_step" || -z "$description" ]]; then
+  echo "usage: record-escaped-ambiguity <run_id> <ticket_id> <origin_ticket_id> <origin_step> <description>" >&2
+  exit 2
+fi
+
+# Resolve the store directory.
+# (Resolution logic duplicated from bin/record-checkpoint — deliberate for v1;
+#  consolidation of the record-* helpers is backlog item BL3, post-T4.)
+store=""
+if [[ -n "${DOKIME_MEASUREMENT_STORE:-}" ]]; then
+  store="$DOKIME_MEASUREMENT_STORE"
+elif [[ -f ./.claude/dokime-config.json ]]; then
+  store="$(jq -r '.measurement_store_path // empty' ./.claude/dokime-config.json)"
+fi
+if [[ -z "$store" ]]; then
+  store="$HOME/.dokime/measurements"
+fi
+store="${store/#\~/$HOME}"   # expand a leading ~ from config
+
+mkdir -p "$store"
+file="$store/escaped-ambiguity.jsonl"
+timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+record="$(jq -nc \
+  --argjson schema_version 1 \
+  --arg run_id "$run_id" --arg ticket_id "$ticket_id" \
+  --arg origin_ticket_id "$origin_ticket_id" --arg origin_step "$origin_step" \
+  --arg description "$description" --arg timestamp "$timestamp" \
+  '{schema_version: $schema_version, run_id: $run_id, ticket_id: $ticket_id, origin_ticket_id: $origin_ticket_id, origin_step: $origin_step, description: $description, timestamp: $timestamp}')"
+
+printf '%s\n' "$record" >> "$file"

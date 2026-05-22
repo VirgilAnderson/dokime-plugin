@@ -595,6 +595,20 @@ This classification feeds the ledger row at B15 and (if new class or direct regr
 
 **`git blame` finds where the code was written, not when the behavior broke.** When blame shows the root-cause code is old but the symptom is new — especially if a peer reports it worked recently — the regression may not be in your code at all. Before classifying origin as pre-dokime or broken-from-birth, check the regression window for a framework or dependency change: was there a major-version upgrade (or any dependency bump) between "last known good" and "first observed bad"? Major versions silently change method *behavior* — e.g. Laravel's `validated()` began stripping unruled nested-array keys across one upgrade. Apply the framework-upgrade behavioral-grep here too: grep for callers of the suspect framework method and read its changelog / upgrade guide for behavior changes, not just signature changes. A behavior regression from a dependency upgrade is still a regression with a datable origin — record the upgrade commit/date as the origin, not `origin_workflow: N`. New failure class: `framework_upgrade_behavior_regression` (structural).
 
+**Escaped-ambiguity check (measurement).** With the root cause and its origin in hand, ask one more question: is this root cause an **ambiguity** — a decision or question that was never surfaced — rather than an implementation error? Discriminate:
+
+- An *implementation error* (a typo, a wrong operator, a missing guard) is **not** an escaped ambiguity.
+- An *unforeseeable interaction* — something no reasonable Step 4 would have asked — is **not** an escaped ambiguity.
+- A *decision that belonged in an earlier ticket's Step 4 / B5 and was never asked* **is** an escaped ambiguity — the workflow's most valuable step missed it.
+
+When it is an escaped ambiguity, record it:
+
+```
+record-escaped-ambiguity <run_id> <ticket_id> <origin_ticket_id> <origin_step> <description>
+```
+
+`origin_ticket_id` / `origin_step` come from the origin trace above; when the originating ticket cannot be identified, pass the literal `unknown` for both — record it anyway, an escaped ambiguity is worth keeping even unattributed. `description` states the ambiguity that should have been surfaced. Like all dokime recording, this is **instrumentation, never a gate** — if the helper is not installed, skip it and proceed.
+
 **CHECKPOINT: Human confirms root cause diagnosis *based on experimental evidence* AND failure class classification. This is the most important checkpoint in the bug workflow — a wrong diagnosis means a wrong fix.**
 
 ---
