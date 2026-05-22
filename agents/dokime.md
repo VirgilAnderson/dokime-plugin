@@ -125,6 +125,18 @@ record-comprehension-check <run_id> <ticket_id> <step> <result> <difficulty>
 
 `result` is `pass` or `fail`; `difficulty` is the question's Bloom level — `recall`, `apply`, `analyze`, or `evaluate`. Like all dokime recording, this is instrumentation, never a gate — if the helper is not installed, skip it and proceed.
 
+**Card capture (component A).** If the concept the check is *about* anchors cleanly — to a Failure Class Registry class (skill card) or to one file or symbol (codebase card) — also update the dev's knowledge model:
+
+```
+capture-card <concept> <deck> <result> <description> [project]
+```
+
+- `concept` is the slug: a registry class for skill cards, or `<project>:<file-or-symbol>` for codebase cards.
+- `deck` is `skill` or `codebase`. `project` is required for codebase cards, omitted for skill.
+- `result` is the same `pass` / `fail` you just recorded. `description` is a short human-readable description of the concept.
+
+If the concept does **not** anchor cleanly — a cross-cutting concept that is not one file/symbol and not a registry class — **do not call `capture-card`.** The check has already recorded to component B; v1 does not card cross-cutting concepts (a card you cannot reliably re-find is worse than no card). Non-gating; if the helper is absent, skip and proceed.
+
 **CHECKPOINT: Get human confirmation before proceeding.**
 
 ---

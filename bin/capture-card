@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Find-or-create a card in the dokime v2 per-dev knowledge model.
+#
+# Part of component A (dokime v2). The dokime workflow calls this at the
+# Step 3 checkpoint alongside `record-comprehension-check` — see the
+# Step-3 Comprehension-check block in agents/dokime.md.
+#
+# Usage: capture-card <concept> <deck> <result> <description> [project]
+#   deck    ∈ codebase | skill
+#   result  ∈ pass | fail
+#   project required iff deck = codebase
+#
+# Behaviour:
+#   - card not found by `concept` slug → create (leitner_box=1, created+last_seen=now,
+#     history=[{result,timestamp}], project set if codebase);
+#   - card found → update: pass → min(leitner_box+1, 5); fail → 1; append
+#     history; update last_seen.
+#
+# Path: $HOME/.dokime/knowledge/cards.json (fixed, per T5). Tests override HOME.
+# Write: atomic — write-to-temp-then-mv (the real file is only ever replaced
+# by a complete file).
+#
+# No developer identifier is written (D5).
+#
+# Requires: jq
+set -euo pipefail
+
+concept="${1:-}"
+deck="${2:-}"
+result="${3:-}"
+description="${4:-}"
+project="${5:-}"
+
+if [[ -z "$concept" || -z "$deck" || -z "$result" || -z "$description" ]]; then
+  echo "usage: capture-card <concept> <deck> <result> <description> [project]" >&2
+  exit 2
+fi
+
+case "$deck" in
+  codebase | skill) ;;
+  *) echo "capture-card: invalid deck '$deck' (expected codebase | skill)" >&2
+     exit 2 ;;
+esac
+
+case "$result" in
+  pass | fail) ;;
+  *) echo "capture-card: invalid result '$result' (expected pass | fail)" >&2
+     exit 2 ;;
+esac
+
+if [[ "$deck" == "codebase" && -z "$project" ]]; then
+  echo "capture-card: a codebase card requires <project>" >&2
+  exit 2
+fi
+
+store_dir="$HOME/.dokime/knowledge"
+store_file="$store_dir/cards.json"
+
+mkdir -p "$store_dir"
+[[ -f "$store_file" ]] || printf '[]\n' > "$store_file"
+
+timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# Compute the next store state with jq.
+new_store="$(jq \
+  --arg concept "$concept" --arg deck "$deck" --arg result "$result" \
+  --arg description "$description" --arg project "$project" --arg ts "$timestamp" \
+  '
+  def update_card:
+    .last_seen = $ts
+    | .leitner_box = (if $result == "pass" then [.leitner_box + 1, 5] | min else 1 end)
+    | .history += [{result: $result, timestamp: $ts}];
+
+  def new_card:
+    {
+      schema_version: 1,
+      concept: $concept,
+      description: $description,
+      deck: $deck,
+      leitner_box: 1,
+      last_seen: $ts,
+      created: $ts,
+      history: [{result: $result, timestamp: $ts}]
+    }
+    | if $deck == "codebase" then . + {project: $project} else . end;
+
+  if any(.[]; .concept == $concept) then
+    map(if .concept == $concept then update_card else . end)
+  else
+    . + [new_card]
+  end
+  ' "$store_file")"
+
+# Atomic write — temp + mv. The real file is only ever swapped for a complete one.
+tmp="$(mktemp "${store_file}.XXXXXX")"
+printf '%s\n' "$new_store" > "$tmp"
+mv "$tmp" "$store_file"
