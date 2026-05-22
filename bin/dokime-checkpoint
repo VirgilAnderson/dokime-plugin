@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# dokime-checkpoint — the single advance-call (dokime v2, BL4).
+#
+# The dokime workflow calls this at every CHECKPOINT, instead of
+# scattered "call record-X" directives. It always records the
+# checkpoint outcome; step-specific flags add the other records.
+#
+# Usage:
+#   dokime-checkpoint <run_id> <ticket_id> <step> <outcome>
+#                     [--note <note>]
+#                     [--escaped-ambiguity <origin_ticket_id> <origin_step> <description>]
+#                     [--comprehension <result> <difficulty>]
+#                     [--card <concept> <deck> <description> [--card-project <project>]]
+#
+#   <outcome>    ∈ approved-clean | approved-with-changes | reopened
+#   <result>     ∈ pass | fail   (inside --comprehension; also used as the card's result)
+#   <difficulty> ∈ recall | apply | analyze | evaluate
+#   <deck>       ∈ codebase | skill
+#
+# The card's `result` is taken from --comprehension; --card therefore
+# requires --comprehension. The cross-cutting-concept skip from T6
+# is achieved simply by omitting --card.
+#
+# Sub-call failures propagate non-zero (set -e).
+set -euo pipefail
+
+run_id="${1:-}"
+ticket_id="${2:-}"
+step="${3:-}"
+outcome="${4:-}"
+
+if [[ -z "$run_id" || -z "$ticket_id" || -z "$step" || -z "$outcome" ]]; then
+  echo "usage: dokime-checkpoint <run_id> <ticket_id> <step> <outcome>" \
+       "[--note <note>]" \
+       "[--escaped-ambiguity <origin_ticket_id> <origin_step> <description>]" \
+       "[--comprehension <result> <difficulty>]" \
+       "[--card <concept> <deck> <description> [--card-project <project>]]" >&2
+  exit 2
+fi
+
+shift 4 || true
+
+note=""
+have_ea=0; ea_origin_ticket=""; ea_origin_step=""; ea_description=""
+have_comp=0; comp_result=""; comp_difficulty=""
+have_card=0; card_concept=""; card_deck=""; card_description=""
+card_project=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --note)
+      note="${2:-}"; shift 2 ;;
+    --escaped-ambiguity)
+      ea_origin_ticket="${2:-}"; ea_origin_step="${3:-}"; ea_description="${4:-}"
+      have_ea=1; shift 4 ;;
+    --comprehension)
+      comp_result="${2:-}"; comp_difficulty="${3:-}"
+      have_comp=1; shift 3 ;;
+    --card)
+      card_concept="${2:-}"; card_deck="${3:-}"; card_description="${4:-}"
+      have_card=1; shift 4 ;;
+    --card-project)
+      card_project="${2:-}"; shift 2 ;;
+    *)
+      echo "dokime-checkpoint: unknown argument '$1'" >&2
+      exit 2 ;;
+  esac
+done
+
+# --card needs --comprehension (the card's result comes from --comprehension).
+if [[ $have_card -eq 1 && $have_comp -eq 0 ]]; then
+  echo "dokime-checkpoint: --card requires --comprehension (the card's result is taken from --comprehension's <result>)" >&2
+  exit 2
+fi
+
+bin_dir="$(dirname "$0")"
+
+# 1) Always — record the checkpoint outcome.
+if [[ -n "$note" ]]; then
+  "$bin_dir/record-checkpoint" "$run_id" "$ticket_id" "$step" "$outcome" "$note"
+else
+  "$bin_dir/record-checkpoint" "$run_id" "$ticket_id" "$step" "$outcome"
+fi
+
+# 2) Optionally — escaped-ambiguity record.
+if [[ $have_ea -eq 1 ]]; then
+  "$bin_dir/record-escaped-ambiguity" \
+    "$run_id" "$ticket_id" "$ea_origin_ticket" "$ea_origin_step" "$ea_description"
+fi
+
+# 3) Optionally — the comprehension check result.
+if [[ $have_comp -eq 1 ]]; then
+  "$bin_dir/record-comprehension-check" \
+    "$run_id" "$ticket_id" "$step" "$comp_result" "$comp_difficulty"
+fi
+
+# 4) Optionally — the card (uses --comprehension's result).
+if [[ $have_card -eq 1 ]]; then
+  if [[ -n "$card_project" ]]; then
+    "$bin_dir/capture-card" \
+      "$card_concept" "$card_deck" "$comp_result" "$card_description" "$card_project"
+  else
+    "$bin_dir/capture-card" \
+      "$card_concept" "$card_deck" "$comp_result" "$card_description"
+  fi
+fi

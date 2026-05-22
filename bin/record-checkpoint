@@ -37,17 +37,10 @@ case "$outcome" in
     ;;
 esac
 
-# Resolve the store directory.
-store=""
-if [[ -n "${DOKIME_MEASUREMENT_STORE:-}" ]]; then
-  store="$DOKIME_MEASUREMENT_STORE"
-elif [[ -f ./.claude/dokime-config.json ]]; then
-  store="$(jq -r '.measurement_store_path // empty' ./.claude/dokime-config.json)"
-fi
-if [[ -z "$store" ]]; then
-  store="$HOME/.dokime/measurements"
-fi
-store="${store/#\~/$HOME}"   # expand a leading ~ from config
+# Resolve the store directory (shared with the other record-* helpers — BL4).
+# shellcheck source=lib/resolve-store-path.sh
+source "$(dirname "$0")/lib/resolve-store-path.sh"
+store="$(resolve_store_path)"
 
 mkdir -p "$store"
 file="$store/checkpoint-outcomes.jsonl"

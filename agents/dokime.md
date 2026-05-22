@@ -53,25 +53,34 @@ The spec file captures **decisions**, not just requirements. "Chose X because Y.
 
 ---
 
-## Recording Checkpoint Outcomes
+## Recording (single advance call)
 
-dokime records what each run produces, so the workflow can be measured against its own claims (the measurement store).
+dokime records what each run produces — checkpoint outcomes (component B's measurement store), escaped ambiguities (B), comprehension results (B), and the dev's comprehension cards (component A's per-dev knowledge model). All of it rides on **one** call.
 
-**At every `CHECKPOINT` in this workflow — Feature or Bug — once the human has resolved it, record the outcome.** Call the helper:
+**At every `CHECKPOINT` in this workflow — Feature or Bug — call `dokime-checkpoint` to advance.** It records the checkpoint outcome always; step-specific flags add the other records.
 
 ```
-record-checkpoint <run_id> <ticket_id> <step> <outcome> [note]
+dokime-checkpoint <run_id> <ticket_id> <step> <outcome>
+                  [--note <note>]
+                  [--escaped-ambiguity <origin_ticket_id> <origin_step> <description>]
+                  [--comprehension <result> <difficulty>]
+                  [--card <concept> <deck> <description> [--card-project <project>]]
 ```
 
-- `run_id` and `ticket_id` — from the spec file header (`run_id` is minted at Step 1).
-- `step` — the checkpoint's step, e.g. `Step 4` or `B4`.
-- `outcome` — classify the resolution as exactly one of:
-  - `approved-clean` — the checkpoint passed with no change to the step's output.
-  - `approved-with-changes` — it passed, but the human's response caused a change to the step's output before it passed (an added acceptance criterion, a corrected decision, a late-surfaced ambiguity).
-  - `reopened` — the checkpoint did not pass; the step's work returns for rework.
-- `note` — optional; what changed (for `approved-with-changes`) or why it was reopened.
+**`run_id` and `ticket_id`** come from the spec file header (`run_id` minted at Step 1). **`step`** is the checkpoint's step (`Step 4`, `B4`, etc.). **`outcome`** is one of:
+- `approved-clean` — the checkpoint passed with no change to the step's output.
+- `approved-with-changes` — passed, but the human's response changed the step's output first.
+- `reopened` — the checkpoint did not pass; the work returns for rework.
 
-The helper resolves the store path itself (`$DOKIME_MEASUREMENT_STORE` → `measurement_store_path` in `./.claude/dokime-config.json` → default `~/.dokime/measurements/`) and guarantees a schema-conforming record — the dev's only job is to *call* it at each checkpoint. Recording is **instrumentation, never a gate**: if the helper is not installed (an older plugin), skip recording and proceed.
+`--note` adds a short reason (what changed for `approved-with-changes`; why for `reopened`).
+
+**At B4 (Root Cause Analysis):** if the bug's root cause is itself an *ambiguity* an earlier Step 4 / B5 should have surfaced — not an implementation error, not an unforeseeable interaction — add `--escaped-ambiguity <origin_ticket_id> <origin_step> <description>`. When the originating ticket cannot be identified, pass the literal `unknown` for both — record the signal anyway.
+
+**At Step 3 (Understand):** pose one discriminating question about the change (checkable answer; name a plausible wrong answer or regenerate) and add `--comprehension <result> <difficulty>`. `<result>` is `pass` / `fail`; `<difficulty>` is the Bloom level — `recall` / `apply` / `analyze` / `evaluate`. The check is **universal but gentle** — fires every Step 3, non-gating, **private to the dev** (D5). A quick gut-check, not an exam.
+
+If — and only if — the concept the check is *about* anchors cleanly (a Failure Class Registry class for skill cards; a single file or symbol — `<project>:<file-or-symbol>` — for codebase cards), **also** add `--card <concept> <deck> <description>` (and `--card-project <project>` for codebase cards). For a *cross-cutting* concept that anchors to neither, omit `--card` — the check is still recorded; v1 does not card concepts a card could not reliably re-find.
+
+`dokime-checkpoint` dispatches internally to the underlying record/capture helpers and resolves their store path itself; the dev's only job is to *call* `dokime-checkpoint` at each checkpoint. Like all dokime recording, this is **instrumentation, never a gate** — if `dokime-checkpoint` is not installed (an older plugin), skip and proceed.
 
 ---
 
@@ -117,25 +126,7 @@ Determine what kind of work this is:
 
 **Optional — UI walkthrough.** Offer the dev a walkthrough of the change: how the affected feature currently works, what is going on under the hood, and what the change will look like and where it lands. "The UI" is the user-facing surface in whatever form it ships — a rendered screen, a CLI invocation and its output, an API response shape, a library's public signature. The dev may decline — some already know the feature; this is **support, not a gate**. Depth scales with Blast Radius and the Scale Heuristic: a sentence on a COLLAPSE ticket, a real walk on a high-blast-radius one.
 
-**Comprehension check.** At this checkpoint, pose the dev **one** discriminating question about the change — a question with a definite, checkable answer (predict the output; which of these breaks; name the file). Discrimination test: name a plausible wrong answer a dev with only shallow understanding would give; if you cannot, the question is not discriminating — regenerate it. This is **universal but gentle** — it fires at every Step 3, it is **non-gating** (a wrong answer does not block the checkpoint), and the result is **private to the dev**. A quick gut-check, not an exam. Record the outcome:
-
-```
-record-comprehension-check <run_id> <ticket_id> <step> <result> <difficulty>
-```
-
-`result` is `pass` or `fail`; `difficulty` is the question's Bloom level — `recall`, `apply`, `analyze`, or `evaluate`. Like all dokime recording, this is instrumentation, never a gate — if the helper is not installed, skip it and proceed.
-
-**Card capture (component A).** If the concept the check is *about* anchors cleanly — to a Failure Class Registry class (skill card) or to one file or symbol (codebase card) — also update the dev's knowledge model:
-
-```
-capture-card <concept> <deck> <result> <description> [project]
-```
-
-- `concept` is the slug: a registry class for skill cards, or `<project>:<file-or-symbol>` for codebase cards.
-- `deck` is `skill` or `codebase`. `project` is required for codebase cards, omitted for skill.
-- `result` is the same `pass` / `fail` you just recorded. `description` is a short human-readable description of the concept.
-
-If the concept does **not** anchor cleanly — a cross-cutting concept that is not one file/symbol and not a registry class — **do not call `capture-card`.** The check has already recorded to component B; v1 does not card cross-cutting concepts (a card you cannot reliably re-find is worse than no card). Non-gating; if the helper is absent, skip and proceed.
+**At this checkpoint — pose one discriminating comprehension question and (when the concept anchors cleanly) capture a card.** When calling `dokime-checkpoint` for this checkpoint, add `--comprehension <result> <difficulty>` for the question (always — universal but gentle, non-gating, private). Discrimination test: name a plausible wrong answer a shallow-understanding dev would give; if you cannot, regenerate the question. If — and only if — the concept anchors cleanly (a Failure Class Registry class for skill, a `<project>:<file-or-symbol>` for codebase), also add `--card <concept> <deck> <description>` (with `--card-project` for codebase). For a cross-cutting concept, omit `--card`. See *Recording (single advance call)* at the top of this document for the full directive.
 
 **CHECKPOINT: Get human confirmation before proceeding.**
 
@@ -433,6 +424,7 @@ While the context is fresh — not as an afterthought.
 - Verify documentation from Step 13 covers the changes
 - Flag any gaps or partial implementations
 - **Reconcile decision rationale across artifacts.** For any in-scope decision made during this workflow whose rationale is recorded in more than one place (spec, session log, commit message, PR draft), re-verify before ship that the rationale still holds. Generalized question: *Has any finding later in this workflow contradicted a scope decision made earlier?* A same-workflow after-finding can quietly supersede the rationale for in-scope work — the two documents drift apart within one session. If a finding has superseded a decision, reconcile: either un-scope the now-unjustified work or update the stale rationale before the code ships. Tagged class: `after_finding_supersession`.
+- **Cross-check the run (measurement audit).** Run `dokime-cross-check <spec-file> <run_id>` — it compares the `✓ PASSED` checkpoint markers in the spec against the checkpoint-outcomes records the run actually emitted, and reports any mismatch (which checkpoints have no record). Resolve any mismatch before final ship — a mismatch means the agent passed a checkpoint in the spec without calling `dokime-checkpoint` for it (a silent miss made visible). If `dokime-cross-check` is not installed (older plugin), skip and proceed.
 
 **CHECKPOINT: Human confirms nothing was missed before proceeding.**
 
@@ -617,19 +609,13 @@ This classification feeds the ledger row at B15 and (if new class or direct regr
 
 **`git blame` finds where the code was written, not when the behavior broke.** When blame shows the root-cause code is old but the symptom is new — especially if a peer reports it worked recently — the regression may not be in your code at all. Before classifying origin as pre-dokime or broken-from-birth, check the regression window for a framework or dependency change: was there a major-version upgrade (or any dependency bump) between "last known good" and "first observed bad"? Major versions silently change method *behavior* — e.g. Laravel's `validated()` began stripping unruled nested-array keys across one upgrade. Apply the framework-upgrade behavioral-grep here too: grep for callers of the suspect framework method and read its changelog / upgrade guide for behavior changes, not just signature changes. A behavior regression from a dependency upgrade is still a regression with a datable origin — record the upgrade commit/date as the origin, not `origin_workflow: N`. New failure class: `framework_upgrade_behavior_regression` (structural).
 
-**Escaped-ambiguity check (measurement).** With the root cause and its origin in hand, ask one more question: is this root cause an **ambiguity** — a decision or question that was never surfaced — rather than an implementation error? Discriminate:
+**Escaped-ambiguity check (measurement).** With the root cause and its origin in hand, ask whether the root cause is an *ambiguity* — a decision an earlier Step 4 / B5 should have surfaced — rather than an implementation error or an unforeseeable interaction:
 
-- An *implementation error* (a typo, a wrong operator, a missing guard) is **not** an escaped ambiguity.
-- An *unforeseeable interaction* — something no reasonable Step 4 would have asked — is **not** an escaped ambiguity.
-- A *decision that belonged in an earlier ticket's Step 4 / B5 and was never asked* **is** an escaped ambiguity — the workflow's most valuable step missed it.
+- *Implementation error* (typo, wrong operator, missing guard) — **not** an escaped ambiguity.
+- *Unforeseeable interaction* — **not** an escaped ambiguity.
+- *Decision that belonged in an earlier Step 4 / B5 and was never asked* — **is** an escaped ambiguity (the workflow's most valuable step missed it).
 
-When it is an escaped ambiguity, record it:
-
-```
-record-escaped-ambiguity <run_id> <ticket_id> <origin_ticket_id> <origin_step> <description>
-```
-
-`origin_ticket_id` / `origin_step` come from the origin trace above; when the originating ticket cannot be identified, pass the literal `unknown` for both — record it anyway, an escaped ambiguity is worth keeping even unattributed. `description` states the ambiguity that should have been surfaced. Like all dokime recording, this is **instrumentation, never a gate** — if the helper is not installed, skip it and proceed.
+When it is, add `--escaped-ambiguity <origin_ticket_id> <origin_step> <description>` to this checkpoint's `dokime-checkpoint` call. `origin_*` come from the origin trace above; pass `unknown` for both when the originating ticket cannot be identified — record the signal anyway. See *Recording (single advance call)* at the top of this document for the full directive.
 
 **CHECKPOINT: Human confirms root cause diagnosis *based on experimental evidence* AND failure class classification. This is the most important checkpoint in the bug workflow — a wrong diagnosis means a wrong fix.**
 
@@ -807,6 +793,7 @@ Same as feature Step 12.
 - Confirm: bug is reproduced as a test, root cause is fixed, desired behavior is achieved, no regressions
 - Flag any related issues discovered during investigation that need separate tickets
 - **Reconcile decision rationale across artifacts.** For any in-scope decision made during this workflow whose rationale is recorded in more than one place (spec, session log, commit message, PR draft), re-verify before ship that the rationale still holds. Generalized question: *Has any finding later in this workflow contradicted a scope decision made earlier?* A same-workflow after-finding can quietly supersede the rationale for in-scope work. If a finding has superseded a decision, reconcile: either un-scope the now-unjustified work or update the stale rationale before the code ships. Tagged class: `after_finding_supersession`.
+- **Cross-check the run (measurement audit).** Run `dokime-cross-check <spec-file> <run_id>` — it compares the `✓ PASSED` checkpoint markers in the spec against the checkpoint-outcomes records the run emitted, and reports any mismatch. Resolve any mismatch before final ship — a mismatch means the agent passed a checkpoint in the spec without calling `dokime-checkpoint` for it (a silent miss made visible). If `dokime-cross-check` is not installed, skip and proceed.
 
 **CHECKPOINT: Human confirms nothing was missed.**
 

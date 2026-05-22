@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# dokime-cross-check — Step 15 / B14 cross-check (dokime v2, BL4).
+#
+# Given a workflow spec file and a run_id, compares:
+#   - the number of `CHECKPOINT — ... ✓ PASSED` markers in the spec
+#   - the number of checkpoint-outcomes records carrying that run_id
+# Reports match or mismatch. Surfaces any silent miss of the
+# dokime-checkpoint call.
+#
+# Usage: dokime-cross-check <spec-file> <run_id>
+# Exit:  0 on match, 1 on mismatch, 2 on usage error.
+#
+# Requires: jq
+
+set -euo pipefail
+
+spec="${1:-}"
+run_id="${2:-}"
+
+if [[ -z "$spec" || -z "$run_id" ]]; then
+  echo "usage: dokime-cross-check <spec-file> <run_id>" >&2
+  exit 2
+fi
+
+if [[ ! -f "$spec" ]]; then
+  echo "dokime-cross-check: spec file not found: $spec" >&2
+  exit 2
+fi
+
+# Resolve the measurement store path (shared lib — BL4).
+# shellcheck source=lib/resolve-store-path.sh
+source "$(dirname "$0")/lib/resolve-store-path.sh"
+store="$(resolve_store_path)"
+store_file="$store/checkpoint-outcomes.jsonl"
+
+# Count ✓ PASSED checkpoint markers in the spec.
+spec_count=$(grep -c "CHECKPOINT.*✓ PASSED" "$spec" 2>/dev/null || true)
+[[ -z "$spec_count" ]] && spec_count=0
+
+# Count records for this run_id in the store.
+record_count=0
+if [[ -f "$store_file" ]]; then
+  record_count=$(jq -c --arg rid "$run_id" 'select(.run_id == $rid)' "$store_file" 2>/dev/null \
+                 | wc -l | tr -d ' ')
+fi
+
+if [[ "$spec_count" == "$record_count" ]]; then
+  echo "dokime-cross-check: ✓ MATCH — $spec_count checkpoints passed, $record_count records (run_id=$run_id)"
+  exit 0
+fi
+
+echo "dokime-cross-check: ✗ MISMATCH — spec shows $spec_count ✓ PASSED checkpoints; store has $record_count records (run_id=$run_id)" >&2
+exit 1
