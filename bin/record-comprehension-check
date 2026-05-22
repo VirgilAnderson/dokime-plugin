@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Append one comprehension-check record to the dokime v2 measurement store.
+#
+# Part of component A (dokime v2). The dokime workflow calls this at the
+# Step 3 checkpoint after posing a decision-point comprehension question —
+# see the comprehension-check block in agents/dokime.md Step 3.
+#
+# The record carries NO developer identifier (decision D5 / Q-T1-6):
+# comprehension data is private to the developer.
+#
+# Usage: record-comprehension-check <run_id> <ticket_id> <step> <result> <difficulty>
+#   result     ∈ pass | fail
+#   difficulty ∈ recall | apply | analyze | evaluate   (Bloom level)
+#
+# Store path resolves by precedence:
+#   $DOKIME_MEASUREMENT_STORE
+#   → measurement_store_path in ./.claude/dokime-config.json
+#   → ~/.dokime/measurements/   (default)
+#
+# Requires: jq
+set -euo pipefail
+
+run_id="${1:-}"
+ticket_id="${2:-}"
+step="${3:-}"
+result="${4:-}"
+difficulty="${5:-}"
+
+if [[ -z "$run_id" || -z "$ticket_id" || -z "$step" || -z "$result" || -z "$difficulty" ]]; then
+  echo "usage: record-comprehension-check <run_id> <ticket_id> <step> <result> <difficulty>" >&2
+  exit 2
+fi
+
+case "$result" in
+  pass | fail) ;;
+  *) echo "record-comprehension-check: invalid result '$result' (expected pass | fail)" >&2
+     exit 2 ;;
+esac
+
+case "$difficulty" in
+  recall | apply | analyze | evaluate) ;;
+  *) echo "record-comprehension-check: invalid difficulty '$difficulty'" \
+          "(expected recall | apply | analyze | evaluate)" >&2
+     exit 2 ;;
+esac
+
+# Resolve the store directory.
+# (Resolution logic duplicated from bin/record-checkpoint — deliberate for v1;
+#  consolidation of the record-* helpers is backlog item BL3, now due post-T4.)
+store=""
+if [[ -n "${DOKIME_MEASUREMENT_STORE:-}" ]]; then
+  store="$DOKIME_MEASUREMENT_STORE"
+elif [[ -f ./.claude/dokime-config.json ]]; then
+  store="$(jq -r '.measurement_store_path // empty' ./.claude/dokime-config.json)"
+fi
+if [[ -z "$store" ]]; then
+  store="$HOME/.dokime/measurements"
+fi
+store="${store/#\~/$HOME}"   # expand a leading ~ from config
+
+mkdir -p "$store"
+file="$store/comprehension-checks.jsonl"
+timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# No developer identifier — D5 / Q-T1-6.
+record="$(jq -nc \
+  --argjson schema_version 1 \
+  --arg run_id "$run_id" --arg ticket_id "$ticket_id" \
+  --arg step "$step" --arg result "$result" \
+  --arg difficulty "$difficulty" --arg timestamp "$timestamp" \
+  '{schema_version: $schema_version, run_id: $run_id, ticket_id: $ticket_id, step: $step, result: $result, difficulty: $difficulty, timestamp: $timestamp}')"
+
+printf '%s\n' "$record" >> "$file"

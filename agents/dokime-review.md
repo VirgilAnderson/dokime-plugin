@@ -181,6 +181,8 @@ Ask one question: **does the overall shape of this change match what the ticket 
 - Ticket asked for a feature flag; PR added a global config
 - Ticket asked to fix a bug; PR refactored the surrounding module
 - Ticket asked for a small fix; PR is a 2000-line rewrite
+
+**Optional — UI walkthrough.** Having taken the broad view, the reviewer may want a walkthrough before detailed review: how the affected surface currently works, what is under the hood, and what the change does and where. "The UI" is the user-facing surface in any form (rendered screen, CLI invocation and output, API response shape, library signature). Optional — a reviewer who knows the area declines; this is **support, not a gate**. A reviewer must understand the code as much as its author.
 - Ticket targets feature X; PR touches code that has nothing to do with X
 
 When in doubt, ask the human before halting: *"This PR's shape doesn't obviously match the ticket. Halt and surface as a Blocker, or proceed with detailed review?"*

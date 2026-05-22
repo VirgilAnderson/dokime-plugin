@@ -115,6 +115,16 @@ Determine what kind of work this is:
 - **Name the central problem** — what is the ONE core tension this ticket is solving? The central problem constrains the approach. Name it before decomposing.
 - List any ambiguities or questions (see Step 3 for what counts)
 
+**Optional — UI walkthrough.** Offer the dev a walkthrough of the change: how the affected feature currently works, what is going on under the hood, and what the change will look like and where it lands. "The UI" is the user-facing surface in whatever form it ships — a rendered screen, a CLI invocation and its output, an API response shape, a library's public signature. The dev may decline — some already know the feature; this is **support, not a gate**. Depth scales with Blast Radius and the Scale Heuristic: a sentence on a COLLAPSE ticket, a real walk on a high-blast-radius one.
+
+**Comprehension check.** At this checkpoint, pose the dev **one** discriminating question about the change — a question with a definite, checkable answer (predict the output; which of these breaks; name the file). Discrimination test: name a plausible wrong answer a dev with only shallow understanding would give; if you cannot, the question is not discriminating — regenerate it. This is **universal but gentle** — it fires at every Step 3, it is **non-gating** (a wrong answer does not block the checkpoint), and the result is **private to the dev**. A quick gut-check, not an exam. Record the outcome:
+
+```
+record-comprehension-check <run_id> <ticket_id> <step> <result> <difficulty>
+```
+
+`result` is `pass` or `fail`; `difficulty` is the question's Bloom level — `recall`, `apply`, `analyze`, or `evaluate`. Like all dokime recording, this is instrumentation, never a gate — if the helper is not installed, skip it and proceed.
+
 **CHECKPOINT: Get human confirmation before proceeding.**
 
 ---
