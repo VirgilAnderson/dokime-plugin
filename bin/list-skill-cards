@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# list-skill-cards — broad-relevance candidate source (dokime v2, T7).
+#
+# Prints the JSON array of all skill-deck cards from the per-dev knowledge
+# model, sorted by `leitner_box` ascending. The Step-7 agent picks ~3 of these
+# as inferred-pertinent broad-relevance candidates (with justifications) for
+# the dev to curate.
+#
+# Usage: list-skill-cards
+# Exit:  0 (always — empty result on cold-start).
+#
+# Requires: jq
+set -uo pipefail
+
+store_file="$HOME/.dokime/knowledge/cards.json"
+if [[ ! -f "$store_file" ]]; then
+  echo "[]"
+  exit 0
+fi
+
+jq 'map(select(.deck == "skill")) | sort_by(.leitner_box)' "$store_file"

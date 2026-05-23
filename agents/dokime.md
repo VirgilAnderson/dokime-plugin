@@ -65,6 +65,7 @@ dokime-checkpoint <run_id> <ticket_id> <step> <outcome>
                   [--escaped-ambiguity <origin_ticket_id> <origin_step> <description>]
                   [--comprehension <result> <difficulty>]
                   [--card <concept> <deck> <description> [--card-project <project>]]
+                  [--review <concept> <deck> <result> <difficulty>]   (repeatable, at Step 7)
 ```
 
 **`run_id` and `ticket_id`** come from the spec file header (`run_id` minted at Step 1). **`step`** is the checkpoint's step (`Step 4`, `B4`, etc.). **`outcome`** is one of:
@@ -79,6 +80,8 @@ dokime-checkpoint <run_id> <ticket_id> <step> <outcome>
 **At Step 3 (Understand):** pose one discriminating question about the change (checkable answer; name a plausible wrong answer or regenerate) and add `--comprehension <result> <difficulty>`. `<result>` is `pass` / `fail`; `<difficulty>` is the Bloom level — `recall` / `apply` / `analyze` / `evaluate`. The check is **universal but gentle** — fires every Step 3, non-gating, **private to the dev** (D5). A quick gut-check, not an exam.
 
 If — and only if — the concept the check is *about* anchors cleanly (a Failure Class Registry class for skill cards; a single file or symbol — `<project>:<file-or-symbol>` — for codebase cards), **also** add `--card <concept> <deck> <description>` (and `--card-project <project>` for codebase cards). For a *cross-cutting* concept that anchors to neither, omit `--card` — the check is still recorded; v1 does not card concepts a card could not reliably re-find.
+
+**At Step 7 (Propose Approach):** review relevant prior knowledge *before* proposing the approach. Surface cards that pertain to this ticket via `bin/list-relevant-cards <project> <files>` (narrow) and `bin/list-skill-cards` (broad-candidate pool); combine narrow + dev-curated broad; sort by `leitner_box` ascending; cap at **3**; pose one discriminating question per surviving card; add one `--review <concept> <deck> <result> <difficulty>` to this checkpoint's `dokime-checkpoint` call per reviewed card. Reviews update the card AND emit a `Step 7:review` comprehension record; they do **not** emit `checkpoint-outcomes` (the cross-check stays clean). Empty deck or no relevant cards → skip silently. Full directive lives in Step 7 below.
 
 `dokime-checkpoint` dispatches internally to the underlying record/capture helpers and resolves their store path itself; the dev's only job is to *call* `dokime-checkpoint` at each checkpoint. Like all dokime recording, this is **instrumentation, never a gate** — if `dokime-checkpoint` is not installed (an older plugin), skip and proceed.
 
@@ -222,6 +225,15 @@ Document the relevant files, patterns, reusable components, and standards found.
 - Q2 no → **FULL LOOP.** Unknown interactions — need careful testing to discover them.
 
 **ALL COLLAPSE → FAST PATH.** If every sub-problem is known, skip ceremony. Focus on edge cases.
+
+**Review relevant prior knowledge (T7).** Before proposing the approach, surface and review cards from the dev's knowledge model that pertain to *this* ticket — knowledge becomes operational at the architectural-decision moment.
+
+1. **Narrow set:** call `bin/list-relevant-cards <project> <files>` with the file/symbol list Step 6 identified. Returns codebase cards anchored to those files (deterministic match against the `<project>:<file-or-symbol>` slug).
+2. **Broad candidates:** call `bin/list-skill-cards`. From the result, propose ~3 candidates inferred-pertinent to this ticket, each with a **one-sentence justification** drawn from the ticket description and Step 4 / Step 6 content. The dev curates — accept, add, drop. *Justifications are the gate against noise: thin justifications are visible failure.* Propose only from **existing cards** — never invent concepts the dev has no card for (that is teaching, not reviewing).
+3. **Combine, sort, cap:** merge narrow + curated broad; sort by `leitner_box` ascending; take the **top 3**. (Box-5 well-known cards deprioritised; the cap keeps the review at ~3 minutes.)
+4. **Conduct reviews:** for each surviving card, generate one discriminating, checkable-answer question — same discrimination rule as Step 3 (name a plausible wrong answer or regenerate). Pose; collect `pass` / `fail` + Bloom difficulty.
+5. **Record:** add one `--review <concept> <deck> <result> <difficulty>` per reviewed card to this checkpoint's `dokime-checkpoint` call (see *Recording (single advance call)* at the top).
+6. **Empty deck or no relevant cards → skip silently.** Non-gating; never blocks Step 7.
 
 Based on patterns found, propose implementation approach:
 - List specific files to modify and what changes each needs

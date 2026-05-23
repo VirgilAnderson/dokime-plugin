@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# list-relevant-cards — narrow-relevance card lookup (dokime v2, T7).
+#
+# Given a project and a list of file/symbol paths, prints the JSON array of
+# codebase-deck cards from the per-dev knowledge model whose concept slug
+# anchors to one of the listed paths (slug format: `<project>:<file-or-symbol>`).
+# Output is sorted by `leitner_box` ascending (lowest box first).
+#
+# Usage: list-relevant-cards <project> [files...]
+# Exit:  0 (always — empty result on no matches; non-zero only on bad usage).
+#
+# Requires: jq
+set -uo pipefail
+
+project="${1:-}"
+
+if [[ -z "$project" ]]; then
+  echo "usage: list-relevant-cards <project> [files...]" >&2
+  exit 2
+fi
+
+shift
+files=("$@")
+
+store_file="$HOME/.dokime/knowledge/cards.json"
+if [[ ! -f "$store_file" ]]; then
+  echo "[]"
+  exit 0
+fi
+
+if [[ ${#files[@]} -eq 0 ]]; then
+  files_json="[]"
+else
+  files_json=$(printf '%s\n' "${files[@]}" | jq -R . | jq -s .)
+fi
+
+jq --arg project "$project" --argjson files "$files_json" '
+  map(select(
+    .deck == "codebase"
+    and .project == $project
+    and (.concept as $c | $files | any(. as $f | $c | endswith(":" + $f)))
+  )) | sort_by(.leitner_box)
+' "$store_file"

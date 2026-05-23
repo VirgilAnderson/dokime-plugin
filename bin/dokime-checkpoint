@@ -11,15 +11,23 @@
 #                     [--escaped-ambiguity <origin_ticket_id> <origin_step> <description>]
 #                     [--comprehension <result> <difficulty>]
 #                     [--card <concept> <deck> <description> [--card-project <project>]]
+#                     [--review <concept> <deck> <result> <difficulty>]   (repeatable, T7)
 #
 #   <outcome>    ∈ approved-clean | approved-with-changes | reopened
-#   <result>     ∈ pass | fail   (inside --comprehension; also used as the card's result)
+#   <result>     ∈ pass | fail   (inside --comprehension or --review)
 #   <difficulty> ∈ recall | apply | analyze | evaluate
 #   <deck>       ∈ codebase | skill
 #
 # The card's `result` is taken from --comprehension; --card therefore
 # requires --comprehension. The cross-cutting-concept skip from T6
 # is achieved simply by omitting --card.
+#
+# --review (T7): each repetition reviews ONE existing card from
+# ~/.dokime/knowledge/cards.json. Emits one comprehension-check record
+# (step set to `<step>:review`) and one card update via capture-card,
+# reusing the existing card's description (and project, for codebase
+# cards). A --review on a missing card exits non-zero. Reviews never
+# emit checkpoint-outcomes records — the cross-check stays clean.
 #
 # Sub-call failures propagate non-zero (set -e).
 set -euo pipefail
@@ -34,7 +42,8 @@ if [[ -z "$run_id" || -z "$ticket_id" || -z "$step" || -z "$outcome" ]]; then
        "[--note <note>]" \
        "[--escaped-ambiguity <origin_ticket_id> <origin_step> <description>]" \
        "[--comprehension <result> <difficulty>]" \
-       "[--card <concept> <deck> <description> [--card-project <project>]]" >&2
+       "[--card <concept> <deck> <description> [--card-project <project>]]" \
+       "[--review <concept> <deck> <result> <difficulty>]   (repeatable)" >&2
   exit 2
 fi
 
@@ -45,6 +54,7 @@ have_ea=0; ea_origin_ticket=""; ea_origin_step=""; ea_description=""
 have_comp=0; comp_result=""; comp_difficulty=""
 have_card=0; card_concept=""; card_deck=""; card_description=""
 card_project=""
+review_concepts=(); review_decks=(); review_results=(); review_difficulties=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -61,6 +71,12 @@ while [[ $# -gt 0 ]]; do
       have_card=1; shift 4 ;;
     --card-project)
       card_project="${2:-}"; shift 2 ;;
+    --review)
+      review_concepts+=("${2:-}")
+      review_decks+=("${3:-}")
+      review_results+=("${4:-}")
+      review_difficulties+=("${5:-}")
+      shift 5 ;;
     *)
       echo "dokime-checkpoint: unknown argument '$1'" >&2
       exit 2 ;;
@@ -103,4 +119,42 @@ if [[ $have_card -eq 1 ]]; then
     "$bin_dir/capture-card" \
       "$card_concept" "$card_deck" "$comp_result" "$card_description"
   fi
+fi
+
+# 5) Optionally — process any --review entries (T7).
+# Each review looks up an existing card (reviews never invent), emits a
+# comprehension-check record with step suffixed ":review", and updates the
+# card via capture-card. Reviews never emit checkpoint-outcomes records.
+if [[ ${#review_concepts[@]} -gt 0 ]]; then
+  cards_file="$HOME/.dokime/knowledge/cards.json"
+  for i in "${!review_concepts[@]}"; do
+    r_concept="${review_concepts[$i]}"
+    r_deck="${review_decks[$i]}"
+    r_result="${review_results[$i]}"
+    r_difficulty="${review_difficulties[$i]}"
+
+    if [[ ! -f "$cards_file" ]]; then
+      echo "dokime-checkpoint: --review failed — no cards file at $cards_file" >&2
+      exit 2
+    fi
+    r_description=$(jq -r --arg concept "$r_concept" \
+      '.[] | select(.concept == $concept) | .description // empty' "$cards_file")
+    if [[ -z "$r_description" ]]; then
+      echo "dokime-checkpoint: --review failed — no card found for concept '$r_concept'" >&2
+      exit 2
+    fi
+    r_project=$(jq -r --arg concept "$r_concept" \
+      '.[] | select(.concept == $concept) | .project // empty' "$cards_file")
+
+    # Comprehension record — step suffixed ":review" to distinguish from Step-3 checks.
+    "$bin_dir/record-comprehension-check" \
+      "$run_id" "$ticket_id" "$step:review" "$r_result" "$r_difficulty"
+
+    # Card update — via capture-card (pass promotes, fail resets).
+    if [[ -n "$r_project" ]]; then
+      "$bin_dir/capture-card" "$r_concept" "$r_deck" "$r_result" "$r_description" "$r_project"
+    else
+      "$bin_dir/capture-card" "$r_concept" "$r_deck" "$r_result" "$r_description"
+    fi
+  done
 fi
