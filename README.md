@@ -11,6 +11,41 @@ Dokime is a TDD workflow that surfaces silent assumptions before they become cod
 
 Dokime forces every decision into the open where a human can approve, correct, or learn from it. The result is a codebase that humans can actually maintain.
 
+**The workflow also measures itself and teaches its operator.** As of plugin **1.12.0**, every checkpoint produces a machine-readable record (a measurement spine), and at decision points the dev's prior knowledge is surfaced and reviewed via just-in-time discriminating questions (a per-dev knowledge model). The first makes the workflow itself auditable; the second makes the human running it less likely to ship code they don't understand. See *How It Records and Teaches* below.
+
+## How It Records and Teaches (since plugin 1.12.0)
+
+Two complementary layers carry alongside the step-by-step prose.
+
+### Measurement — the audit trail
+
+Every checkpoint produces a JSONL record. Three record types accumulate in a per-user measurement store (`~/.dokime/measurements/` by default; configurable via `$DOKIME_MEASUREMENT_STORE` or a `measurement_store_path` key in `./.claude/dokime-config.json`):
+
+| File | Holds | Written at |
+|------|-------|-----------|
+| `checkpoint-outcomes.jsonl` | one per checkpoint resolved (`approved-clean` · `approved-with-changes` · `reopened`) | every CHECKPOINT |
+| `escaped-ambiguity.jsonl` | one per bug whose root cause was an ambiguity an earlier Step 4 / B5 should have surfaced — attributed to the originating ticket | B4 |
+| `comprehension-checks.jsonl` | one per discriminating question; carries pass/fail + AI's self-tagged Bloom + (since 1.12.0) the recommended Bloom target | Step 3 + Step 7 reviews |
+
+These records make the workflow evaluable against its own claims. They never contain a developer identifier — privacy by construction.
+
+### Comprehension — just-in-time teaching + retention
+
+A private, out-of-repo per-dev knowledge model (`~/.dokime/knowledge/cards.json`, never committed) accumulates **cards** — one per concept the dev has been checked or taught on. Each card has a Leitner box (1–5), a pass/fail history, and an *anchored* concept slug (Failure Class Registry class for skill cards; `<project>:<file-or-symbol>` for codebase cards — never a fuzzy free-text name).
+
+The teaching loop runs at two places:
+
+- **Step 3 (Understand the Ticket)** — *learning new things.* An optional UI walkthrough (default-on for tickets touching user-visible surfaces) walks the dev through how the affected feature works. Then a universal-but-gentle comprehension check: one discriminating question, generated at the right Bloom level for the dev's prior familiarity with the concept (computed by `bin/target-bloom`). Pass/fail recorded; card created or updated.
+- **Step 7 (Propose Approach)** — *reviewing relevant prior knowledge before the architectural decision.* Cards relevant to *this* ticket are surfaced — narrow (codebase cards anchored to files Step 6 named) + broad (AI-proposes-dev-curates from the skill deck) — capped at 3, sorted by Leitner box ascending. Each is reviewed via a discriminating question at its target Bloom. The dev demonstrates understanding *before* proposing the approach.
+
+The whole thing is **non-gating** — a failed comprehension check or review never blocks the workflow. It records, surfaces, and helps; it does not police.
+
+### How they wire together
+
+The workflow agent invokes a single advance-helper at every checkpoint — `bin/dokime-checkpoint` — which internally dispatches to the right record/capture helpers based on which flags are passed. One call site, deterministic plumbing. A Step-15 audit (`bin/dokime-cross-check`) compares the spec's `✓ PASSED` markers to the recorded checkpoint count and surfaces any silent miss.
+
+The `bin/` directory holds the deterministic implementation (10 helpers, 85 test cases). The `agents/dokime.md` workflow prose tells the agent *when* to call them. You don't invoke `bin/` helpers directly; the workflow agent does.
+
 ## Installation
 
 **Step 1: Add the marketplace**
@@ -83,6 +118,8 @@ Step 15: Completion Check     → Spec vs. implementation            → CHECKPO
 Step 16: Ship                 → PR packaging, desc, spec, QA guide → CHECKPOINT
 ```
 
+**Since plugin 1.12.0:** Step 3 includes the optional UI walkthrough (default-on for user-visible-surface tickets) and the calibrated comprehension check (one discriminating question at the dev's target Bloom level — computed per-card). Step 7 includes a just-in-time review of relevant cards from the per-dev knowledge model (narrow + broad relevance, capped at 3, lowest-box first), with each review feeding back into the card via `capture-card`. Step 15 includes a `dokime-cross-check` audit — passed-checkpoint count vs. recorded count, so any silent miss of `dokime-checkpoint` becomes visible.
+
 ## Bug Fix Workflow (B1-B15)
 
 Branches from Step 2 when the ticket is a bug. Diagnosis-first — the ambiguity isn't "what should we build?" but "why is this broken?"
@@ -106,6 +143,8 @@ Step B13: Document            → Docs if behavior changed           → Docs up
 Step B14: Completion Check    → Spec vs. fix                       → CHECKPOINT
 Step B15: Ship                → PR, repro test, QA guide           → CHECKPOINT
 ```
+
+**Since plugin 1.7.0:** Step B4 includes an escaped-ambiguity check — when a bug's root cause is an ambiguity an earlier Step 4 / B5 *should have* surfaced (not an implementation error, not an unforeseeable interaction), the workflow records it (`record-escaped-ambiguity`) attributed back to the originating ticket. This is the workflow's slow signal: which tickets let which ambiguities through.
 
 Every step with a CHECKPOINT requires human confirmation before proceeding.
 
@@ -151,7 +190,7 @@ The plugin reads this file to customize paths, commands, and team-specific setti
 
 ## Evidence
 
-Tested in controlled experiments (4 peiraí, Feb 2026) and production brownfield tickets (Feb-Apr 2026):
+Tested in controlled experiments (4 peiraí, Feb 2026) and production brownfield tickets (Feb 2026 onward):
 
 - Ambiguity surfacing catches 12-16 silent assumptions per ticket vs 0 for freestyle
 - Scale heuristic correctly triages complexity every time
@@ -159,6 +198,7 @@ Tested in controlled experiments (4 peiraí, Feb 2026) and production brownfield
 - Verify step catches bugs that automated tests can't (label collisions, UI placement errors)
 - "Trace before you log" saves significant debugging time on bug fixes
 - Production-tested daily on Laravel tickets with team stakeholders
+- **v2 v1 build (May 2026):** the workflow was used to specify and implement its own re-founding — 8 tickets + 1 backlog item shipped via `dokime:workflow`, surfacing 14 evolution observations from dogfooding (subsequently triaged). The measurement spine and per-dev knowledge model added in this build mean the workflow now sees its own effects, teaches its operator at decision points, and audits whether instrumentation actually fired
 
 ## Philosophy
 

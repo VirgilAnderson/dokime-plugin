@@ -125,12 +125,18 @@ Determine what kind of work this is:
 
 - Read and summarize the ticket requirements
 - Identify acceptance criteria
-- Read the relevant code — don't guess what it does
+- Read the relevant code — don't guess what it does. **If the working branch has changed since a relied-on file was Read** (mid-workflow branch switch, or a session resumed across a branch change), re-Read every file before continuing analysis. Prior-branch content is stale; reasoning from it produces decisions about code that no longer exists. Tagged class: `branch_state_assumption_after_switch`.
 - Identify which files, services, and models are involved
 - **Name the central problem** — what is the ONE core tension this ticket is solving? The central problem constrains the approach. Name it before decomposing.
 - List any ambiguities or questions (see Step 3 for what counts)
 
-**Optional — UI walkthrough.** Offer the dev a walkthrough of the change: how the affected feature currently works, what is going on under the hood, and what the change will look like and where it lands. "The UI" is the user-facing surface in whatever form it ships — a rendered screen, a CLI invocation and its output, an API response shape, a library's public signature. The dev may decline — some already know the feature; this is **support, not a gate**. Depth scales with Blast Radius and the Scale Heuristic: a sentence on a COLLAPSE ticket, a real walk on a high-blast-radius one.
+**Theory-construction discipline.** When constructing an explanation for an observed behavior at Step 3, run these checks *before* the explanation hardens:
+
+1. **What would discriminate this theory from alternatives?** (Rule 12 — `non_discriminating_diagnosis`). If a coherent explanation came together quickly, name what would distinguish it from the next-most-likely alternative. A theory that *fits* the evidence isn't yet a theory that the evidence *selects*. Discrimination first; coherence second.
+2. **Are temporal / historical claims grounded in evidence of the right scope?** (`unverified_library_mechanism_claim`). "Dead from day one," "always worked this way," "never used" — these are historical claims. A present-state observation (today's DB query, today's code grep) is evidence for the *present*, not for "from day one." Verify temporal scope against historical evidence (git log, archived data, prior records) or scope the claim to what was actually observed.
+3. **Session-log provenance.** If a session-log entry (or any AI-side note) is cited as evidence for a scope decision, classify the source: real-world observation (commit, screenshot, test result, human report) vs. AI-side inference from an earlier session. AI inference re-cited as evidence is **a single source double-counted** — it can compound with a sibling stale read to feel like corroboration when it is one source counted twice. If the entry is inference, re-verify the underlying code/data; don't treat it as independent. Tagged class: `session_log_as_authority`.
+
+**UI walkthrough — default for user-visible surfaces; declinable.** Offer the dev a walkthrough of the change: how the affected feature currently works, what is going on under the hood, and what the change will look like and where it lands. "The UI" is the user-facing surface in whatever form it ships — a rendered screen, a CLI invocation and its output, an API response shape, a library's public signature. **Default-on for any ticket touching a user-visible surface** (rendered UI, CLI output shape, API JSON contract, library signature). For pure-refactor / infra-only tickets with no user-visible surface, the walkthrough remains optional. The dev may decline in either case — some already know the area cold; this is **support, not a gate**. Depth scales with Blast Radius and the Scale Heuristic: a sentence on a COLLAPSE ticket, a real walk on a high-blast-radius one. *Promoted from Optional based on concrete production evidence (evolution feed id=106): the walkthrough was the single most load-bearing step on a ticket where skipping it would have shipped wrong scope.*
 
 **At this checkpoint — pose one discriminating comprehension question and (when the concept anchors cleanly) capture a card.** First, call `bin/target-bloom <concept>` to compute the target Bloom level (cold-start → `recall`); aim the discriminating question at that level. When calling `dokime-checkpoint` for this checkpoint, add `--comprehension <result> <difficulty>` for the question (always — universal but gentle, non-gating, private) and `--target-difficulty <target>` with the computed target (T8 — bumps the comprehension record to `schema_version: 2`). Discrimination test: name a plausible wrong answer a shallow-understanding dev would give; if you cannot, regenerate the question. If — and only if — the concept anchors cleanly (a Failure Class Registry class for skill, a `<project>:<file-or-symbol>` for codebase), also add `--card <concept> <deck> <description>` (with `--card-project` for codebase). For a cross-cutting concept, omit `--card`. See *Recording (single advance call)* at the top of this document for the full directive.
 
@@ -158,6 +164,7 @@ For each ambiguity:
 - Data model choices with downstream consequences
 - Application order affecting outcomes (e.g., discount stacking, rule priority)
 - Anything where "reasonable default" ≠ "what the business wants"
+- **Which of two seemingly-equivalent data sources?** When a Step-4 ambiguity is "which redux slice / which API endpoint / which DB table / which config field do we read?", the resolution MUST include an **empirical inspection** of what each contains in the relevant runtime context (DevTools redux dump, sample API response, DB query, actual config-file contents) — *not* theoretical reasoning about which "should" be right. Two sources that look equivalent in the schema may differ in field-subsetting, lifecycle population, or impersonation context; the difference is only visible by looking. Tagged class: `data_source_assumption_without_inspection`.
 
 Post business-decision ambiguities to stakeholders. **DO NOT PROCEED until questions are answered or explicitly deferred.**
 
@@ -530,7 +537,7 @@ If the ticket is missing reproduction steps, expected result, or actual result �
 ### Step B2: Understand the Bug
 
 - Read and summarize the reported bug
-- Read the relevant code — don't guess what it does
+- Read the relevant code — don't guess what it does. **If the working branch has changed since a relied-on file was Read** (mid-workflow branch switch, or a session resumed across a branch change), re-Read every file before continuing analysis. Prior-branch content is stale; reasoning from it produces decisions about code that no longer exists. Tagged class: `branch_state_assumption_after_switch`.
 - Identify which files, services, and models are involved
 - **Name the central problem** — what is the ONE thing that's broken? Name it before investigating.
 - Note any initial hypotheses about the cause, but don't commit to one yet
