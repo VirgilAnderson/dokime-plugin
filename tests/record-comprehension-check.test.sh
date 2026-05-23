@@ -84,6 +84,30 @@ homedir="$(mktemp -d)"
 check $? "default store ~/.dokime/measurements/ used when unconfigured"
 rm -rf "$homedir"
 
+# 10 — 6th arg target_difficulty present → schema_version=2 and field included (T8)
+tmp10="$(mktemp -d)"
+DOKIME_MEASUREMENT_STORE="$tmp10" "$HELPER" "R" "T" "Step 3" "pass" "recall" "analyze" >/dev/null 2>&1
+tail -1 "$tmp10/comprehension-checks.jsonl" 2>/dev/null \
+  | jq -e '.schema_version == 2 and .target_difficulty == "analyze"' >/dev/null 2>&1
+check $? "with target_difficulty (6th arg) → schema_version=2 with field"
+rm -rf "$tmp10"
+
+# 11 — 6th arg absent → schema_version=1 (backward-compat; T8)
+tmp11="$(mktemp -d)"
+DOKIME_MEASUREMENT_STORE="$tmp11" "$HELPER" "R" "T" "Step 3" "pass" "recall" >/dev/null 2>&1
+tail -1 "$tmp11/comprehension-checks.jsonl" 2>/dev/null \
+  | jq -e '.schema_version == 1 and (has("target_difficulty") | not)' >/dev/null 2>&1
+check $? "without target_difficulty → schema_version=1 (backward-compat)"
+rm -rf "$tmp11"
+
+# 12 — invalid target_difficulty → non-zero, no write (T8)
+tmp12="$(mktemp -d)"
+DOKIME_MEASUREMENT_STORE="$tmp12" "$HELPER" "R" "T" "Step 3" "pass" "recall" "BOGUS" >/dev/null 2>&1
+rc=$?
+[[ "$rc" -ne 0 && ! -f "$tmp12/comprehension-checks.jsonl" ]]
+check $? "invalid target_difficulty → non-zero, no write"
+rm -rf "$tmp12"
+
 echo
 echo "passed: $pass   failed: $fail"
 [[ "$fail" -eq 0 ]]

@@ -11,12 +11,20 @@
 #                     [--escaped-ambiguity <origin_ticket_id> <origin_step> <description>]
 #                     [--comprehension <result> <difficulty>]
 #                     [--card <concept> <deck> <description> [--card-project <project>]]
-#                     [--review <concept> <deck> <result> <difficulty>]   (repeatable, T7)
+#                     [--review <concept> <deck> <result> <difficulty> [<target_difficulty>]]   (repeatable, T7+T8)
+#                     [--target-difficulty <bloom>]                       (T8, applies to --comprehension)
 #
 #   <outcome>    ∈ approved-clean | approved-with-changes | reopened
 #   <result>     ∈ pass | fail   (inside --comprehension or --review)
 #   <difficulty> ∈ recall | apply | analyze | evaluate
 #   <deck>       ∈ codebase | skill
+#   <bloom>      ∈ recall | apply | analyze | evaluate
+#
+# --target-difficulty (T8): applies to --comprehension. When present, the
+# --comprehension record bumps to schema_version=2 carrying target_difficulty.
+# For each --review, the *per-card* target is carried as the optional 5th
+# positional arg of --review itself (different cards may need different
+# targets within the same call — Step 7's review-up-to-3 case).
 #
 # The card's `result` is taken from --comprehension; --card therefore
 # requires --comprehension. The cross-cutting-concept skip from T6
@@ -43,7 +51,8 @@ if [[ -z "$run_id" || -z "$ticket_id" || -z "$step" || -z "$outcome" ]]; then
        "[--escaped-ambiguity <origin_ticket_id> <origin_step> <description>]" \
        "[--comprehension <result> <difficulty>]" \
        "[--card <concept> <deck> <description> [--card-project <project>]]" \
-       "[--review <concept> <deck> <result> <difficulty>]   (repeatable)" >&2
+       "[--review <concept> <deck> <result> <difficulty> [<target_difficulty>]]   (repeatable)" \
+       "[--target-difficulty <bloom>]" >&2
   exit 2
 fi
 
@@ -54,7 +63,8 @@ have_ea=0; ea_origin_ticket=""; ea_origin_step=""; ea_description=""
 have_comp=0; comp_result=""; comp_difficulty=""
 have_card=0; card_concept=""; card_deck=""; card_description=""
 card_project=""
-review_concepts=(); review_decks=(); review_results=(); review_difficulties=()
+review_concepts=(); review_decks=(); review_results=(); review_difficulties=(); review_targets=()
+target_difficulty=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -76,12 +86,40 @@ while [[ $# -gt 0 ]]; do
       review_decks+=("${3:-}")
       review_results+=("${4:-}")
       review_difficulties+=("${5:-}")
-      shift 5 ;;
+      # Optional 5th positional — per-review target_difficulty.
+      # Recognised only if present and not the start of another flag.
+      if [[ "${6:-}" != "" && "${6:-}" != --* ]]; then
+        review_targets+=("$6")
+        # Validate per-review target enum eagerly.
+        case "$6" in
+          recall | apply | analyze | evaluate) ;;
+          *) echo "dokime-checkpoint: invalid --review target_difficulty '$6'" \
+                  "(expected recall | apply | analyze | evaluate)" >&2
+             exit 2 ;;
+        esac
+        shift 6
+      else
+        review_targets+=("")
+        shift 5
+      fi
+      ;;
+    --target-difficulty)
+      target_difficulty="${2:-}"; shift 2 ;;
     *)
       echo "dokime-checkpoint: unknown argument '$1'" >&2
       exit 2 ;;
   esac
 done
+
+# Validate --target-difficulty enum early (before any sub-dispatch).
+if [[ -n "$target_difficulty" ]]; then
+  case "$target_difficulty" in
+    recall | apply | analyze | evaluate) ;;
+    *) echo "dokime-checkpoint: invalid --target-difficulty '$target_difficulty'" \
+            "(expected recall | apply | analyze | evaluate)" >&2
+       exit 2 ;;
+  esac
+fi
 
 # --card needs --comprehension (the card's result comes from --comprehension).
 if [[ $have_card -eq 1 && $have_comp -eq 0 ]]; then
@@ -106,8 +144,13 @@ fi
 
 # 3) Optionally — the comprehension check result.
 if [[ $have_comp -eq 1 ]]; then
-  "$bin_dir/record-comprehension-check" \
-    "$run_id" "$ticket_id" "$step" "$comp_result" "$comp_difficulty"
+  if [[ -n "$target_difficulty" ]]; then
+    "$bin_dir/record-comprehension-check" \
+      "$run_id" "$ticket_id" "$step" "$comp_result" "$comp_difficulty" "$target_difficulty"
+  else
+    "$bin_dir/record-comprehension-check" \
+      "$run_id" "$ticket_id" "$step" "$comp_result" "$comp_difficulty"
+  fi
 fi
 
 # 4) Optionally — the card (uses --comprehension's result).
@@ -146,9 +189,17 @@ if [[ ${#review_concepts[@]} -gt 0 ]]; then
     r_project=$(jq -r --arg concept "$r_concept" \
       '.[] | select(.concept == $concept) | .project // empty' "$cards_file")
 
-    # Comprehension record — step suffixed ":review" to distinguish from Step-3 checks.
-    "$bin_dir/record-comprehension-check" \
-      "$run_id" "$ticket_id" "$step:review" "$r_result" "$r_difficulty"
+    # Comprehension record — step suffixed ":review". Per-review target
+    # comes from review_targets (the 5th positional of --review), NOT the
+    # top-level --target-difficulty (which applies to --comprehension only).
+    r_target="${review_targets[$i]}"
+    if [[ -n "$r_target" ]]; then
+      "$bin_dir/record-comprehension-check" \
+        "$run_id" "$ticket_id" "$step:review" "$r_result" "$r_difficulty" "$r_target"
+    else
+      "$bin_dir/record-comprehension-check" \
+        "$run_id" "$ticket_id" "$step:review" "$r_result" "$r_difficulty"
+    fi
 
     # Card update — via capture-card (pass promotes, fail resets).
     if [[ -n "$r_project" ]]; then

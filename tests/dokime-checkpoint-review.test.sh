@@ -94,6 +94,45 @@ reset_state
    && "$(count_lines "$state_dir/comprehension-checks.jsonl")" == "0" ]]
 check $? "bare advance still works (no --review) — backward compatible"
 
+# 7 — --review with 5th positional <target_difficulty> → v2 record carrying the target (T8)
+reset_state
+cat > "$state_dir/.dokime/knowledge/cards.json" <<EOF
+[
+  {"schema_version":1,"concept":"tautological_test","description":"d","deck":"skill","leitner_box":4,"last_seen":"2026-05-22T00:00:00Z","created":"2026-05-22T00:00:00Z","history":[]}
+]
+EOF
+"$HELPER" "T7_R" "DKV2-T7" "Step 7" "approved-clean" \
+  --review "tautological_test" "skill" "pass" "analyze" "analyze" >/dev/null 2>&1
+tail -1 "$state_dir/comprehension-checks.jsonl" 2>/dev/null \
+  | jq -e '.schema_version == 2 and .target_difficulty == "analyze"' >/dev/null 2>&1
+check $? "--review with per-review target → v2 record carries the target"
+
+# 8 — two --reviews with DIFFERENT per-review targets → two v2 records with distinct targets (T8)
+reset_state
+cat > "$state_dir/.dokime/knowledge/cards.json" <<EOF
+[
+  {"schema_version":1,"concept":"low_box","description":"d","deck":"skill","leitner_box":1,"last_seen":"2026-05-22T00:00:00Z","created":"2026-05-22T00:00:00Z","history":[]},
+  {"schema_version":1,"concept":"high_box","description":"d","deck":"skill","leitner_box":5,"last_seen":"2026-05-22T00:00:00Z","created":"2026-05-22T00:00:00Z","history":[]}
+]
+EOF
+"$HELPER" "T7_R" "DKV2-T7" "Step 7" "approved-clean" \
+  --review "low_box" "skill" "pass" "recall" "recall" \
+  --review "high_box" "skill" "pass" "evaluate" "evaluate" >/dev/null 2>&1
+recs=$(jq -s -c '[.[] | .target_difficulty] | sort' "$state_dir/comprehension-checks.jsonl" 2>/dev/null)
+[[ "$recs" == '["evaluate","recall"]' ]]
+check $? "two --reviews with distinct per-review targets → two v2 records with distinct targets"
+
+# 9 — --review's optional 5th arg invalid bloom → non-zero, no records (T8)
+reset_state
+cat > "$state_dir/.dokime/knowledge/cards.json" <<EOF
+[{"schema_version":1,"concept":"tautological_test","description":"d","deck":"skill","leitner_box":2,"last_seen":"2026-05-22T00:00:00Z","created":"2026-05-22T00:00:00Z","history":[]}]
+EOF
+"$HELPER" "T7_R" "DKV2-T7" "Step 7" "approved-clean" \
+  --review "tautological_test" "skill" "pass" "apply" "BOGUS" >/dev/null 2>&1
+rc=$?
+[[ "$rc" -ne 0 && "$(count_lines "$state_dir/comprehension-checks.jsonl")" == "0" ]]
+check $? "--review with invalid 5th-arg target → non-zero, no records"
+
 echo
 echo "passed: $pass   failed: $fail"
 [[ "$fail" -eq 0 ]]

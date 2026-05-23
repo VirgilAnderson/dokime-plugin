@@ -109,6 +109,29 @@ reset_state
 [[ $? -ne 0 ]]
 check $? "--card without --comprehension → non-zero"
 
+# 10 — --target-difficulty with --comprehension → v2 record carrying the target (T8)
+reset_state
+"$HELPER" "BL4_R" "DKV2-BL4" "Step 3" "approved-clean" \
+  --comprehension "pass" "recall" --target-difficulty "analyze" >/dev/null 2>&1
+tail -1 "$state_dir/comprehension-checks.jsonl" 2>/dev/null \
+  | jq -e '.schema_version == 2 and .target_difficulty == "analyze"' >/dev/null 2>&1
+check $? "--target-difficulty + --comprehension → v2 record with target"
+
+# 11 — --comprehension without --target-difficulty → v1 record (backward-compat; T8)
+reset_state
+"$HELPER" "BL4_R" "DKV2-BL4" "Step 3" "approved-clean" \
+  --comprehension "pass" "recall" >/dev/null 2>&1
+tail -1 "$state_dir/comprehension-checks.jsonl" 2>/dev/null \
+  | jq -e '.schema_version == 1' >/dev/null 2>&1
+check $? "--comprehension alone → v1 record (backward-compat)"
+
+# 12 — invalid --target-difficulty bloom → non-zero (T8)
+reset_state
+"$HELPER" "BL4_R" "DKV2-BL4" "Step 3" "approved-clean" \
+  --comprehension "pass" "recall" --target-difficulty "BOGUS" >/dev/null 2>&1
+[[ $? -ne 0 ]]
+check $? "invalid --target-difficulty → non-zero"
+
 echo
 echo "passed: $pass   failed: $fail"
 [[ "$fail" -eq 0 ]]

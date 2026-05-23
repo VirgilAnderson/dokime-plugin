@@ -8,9 +8,14 @@
 # The record carries NO developer identifier (decision D5 / Q-T1-6):
 # comprehension data is private to the developer.
 #
-# Usage: record-comprehension-check <run_id> <ticket_id> <step> <result> <difficulty>
-#   result     ∈ pass | fail
-#   difficulty ∈ recall | apply | analyze | evaluate   (Bloom level)
+# Usage: record-comprehension-check <run_id> <ticket_id> <step> <result> <difficulty> [target_difficulty]
+#   result            ∈ pass | fail
+#   difficulty        ∈ recall | apply | analyze | evaluate   (Bloom level, self-tagged)
+#   target_difficulty ∈ recall | apply | analyze | evaluate   (Bloom level, recommended; T8)
+#
+# When target_difficulty is provided, the record is written at
+# schema_version=2 and carries the field. When absent, the record
+# stays at schema_version=1 (unchanged from pre-T8).
 #
 # Store path resolves by precedence:
 #   $DOKIME_MEASUREMENT_STORE
@@ -25,9 +30,10 @@ ticket_id="${2:-}"
 step="${3:-}"
 result="${4:-}"
 difficulty="${5:-}"
+target_difficulty="${6:-}"
 
 if [[ -z "$run_id" || -z "$ticket_id" || -z "$step" || -z "$result" || -z "$difficulty" ]]; then
-  echo "usage: record-comprehension-check <run_id> <ticket_id> <step> <result> <difficulty>" >&2
+  echo "usage: record-comprehension-check <run_id> <ticket_id> <step> <result> <difficulty> [target_difficulty]" >&2
   exit 2
 fi
 
@@ -44,6 +50,15 @@ case "$difficulty" in
      exit 2 ;;
 esac
 
+if [[ -n "$target_difficulty" ]]; then
+  case "$target_difficulty" in
+    recall | apply | analyze | evaluate) ;;
+    *) echo "record-comprehension-check: invalid target_difficulty '$target_difficulty'" \
+            "(expected recall | apply | analyze | evaluate)" >&2
+       exit 2 ;;
+  esac
+fi
+
 # Resolve the store directory (shared with the other record-* helpers — BL4).
 # shellcheck source=lib/resolve-store-path.sh
 source "$(dirname "$0")/lib/resolve-store-path.sh"
@@ -54,11 +69,22 @@ file="$store/comprehension-checks.jsonl"
 timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 # No developer identifier — D5 / Q-T1-6.
-record="$(jq -nc \
-  --argjson schema_version 1 \
-  --arg run_id "$run_id" --arg ticket_id "$ticket_id" \
-  --arg step "$step" --arg result "$result" \
-  --arg difficulty "$difficulty" --arg timestamp "$timestamp" \
-  '{schema_version: $schema_version, run_id: $run_id, ticket_id: $ticket_id, step: $step, result: $result, difficulty: $difficulty, timestamp: $timestamp}')"
+# Schema bump: when target_difficulty is present, write v2; otherwise v1.
+if [[ -n "$target_difficulty" ]]; then
+  record="$(jq -nc \
+    --argjson schema_version 2 \
+    --arg run_id "$run_id" --arg ticket_id "$ticket_id" \
+    --arg step "$step" --arg result "$result" \
+    --arg difficulty "$difficulty" --arg target_difficulty "$target_difficulty" \
+    --arg timestamp "$timestamp" \
+    '{schema_version: $schema_version, run_id: $run_id, ticket_id: $ticket_id, step: $step, result: $result, difficulty: $difficulty, target_difficulty: $target_difficulty, timestamp: $timestamp}')"
+else
+  record="$(jq -nc \
+    --argjson schema_version 1 \
+    --arg run_id "$run_id" --arg ticket_id "$ticket_id" \
+    --arg step "$step" --arg result "$result" \
+    --arg difficulty "$difficulty" --arg timestamp "$timestamp" \
+    '{schema_version: $schema_version, run_id: $run_id, ticket_id: $ticket_id, step: $step, result: $result, difficulty: $difficulty, timestamp: $timestamp}')"
+fi
 
 printf '%s\n' "$record" >> "$file"

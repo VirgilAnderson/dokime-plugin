@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# target-bloom — recommend a target Bloom level for a card's review
+# (dokime v2, ticket DKV2-T8).
+#
+# Reads ~/.dokime/knowledge/cards.json, finds the card by concept slug,
+# applies the box→Bloom mapping (Q-T8-1):
+#
+#   box 1 → recall      box 4 → analyze
+#   box 2 → apply       box 5 → evaluate
+#   box 3 → apply
+#
+# Cold-start (no cards.json, or concept not yet carded) → recall.
+#
+# Usage: target-bloom <concept>
+# Output: one of {recall, apply, analyze, evaluate} on stdout.
+# Exit:   0 always (cold-start is a valid answer); 2 on missing arg.
+#
+# Requires: jq
+set -uo pipefail
+
+concept="${1:-}"
+
+if [[ -z "$concept" ]]; then
+  echo "usage: target-bloom <concept>" >&2
+  exit 2
+fi
+
+store_file="$HOME/.dokime/knowledge/cards.json"
+if [[ ! -f "$store_file" ]]; then
+  echo "recall"
+  exit 0
+fi
+
+box=$(jq -r --arg concept "$concept" \
+  '.[] | select(.concept == $concept) | .leitner_box // empty' \
+  "$store_file" 2>/dev/null)
+
+if [[ -z "$box" ]]; then
+  echo "recall"   # cold-start: concept not yet carded
+  exit 0
+fi
+
+case "$box" in
+  1) echo "recall" ;;
+  2|3) echo "apply" ;;
+  4) echo "analyze" ;;
+  5) echo "evaluate" ;;
+  *) echo "recall" ;;   # defensive: box out of 1-5 → floor
+esac
