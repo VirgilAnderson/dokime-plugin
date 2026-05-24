@@ -197,7 +197,7 @@ Log tradeoff evaluations to the spec file.
 ## Step 6: Analyze Codebase
 
 **Read the project first:**
-- Read any README, CLAUDE.md, contributing guide, or code style guide
+- **Read project style sources concretely.** Not "a style guide" — name and read what governs *this* codebase. In rough order of specificity: (1) project `CLAUDE.md` style sections; (2) top-level `STYLE.md`, `CONTRIBUTING.md`, `.github/CONTRIBUTING.md`; (3) language tooling configs — PHP: `pint.json`, `phpcs.xml`; JS/TS: `.eslintrc*` / `eslint.config.*` / `.prettierrc`; Python: `pyproject.toml [tool.ruff]/[tool.black]`, `.flake8`; Ruby: `.rubocop.yml`; Go: `.golangci.yml`; (4) `.editorconfig`; (5) framework conventions in framework docs. Not a checklist — read until you have what governs this codebase. The discipline is concrete lookup, not list completion. Tagged class: `abstract_instruction_vacuously_honored`.
 - Identify coding standards, conventions, and architectural patterns the project follows
 - Note the testing conventions — how are tests organized, named, what factories/fixtures exist?
 
@@ -212,6 +212,19 @@ Log tradeoff evaluations to the spec file.
 - Identify files that will need modification
 - Check for shared components — who else uses them?
 - Look for similar implementations to follow as a pattern
+
+**Specialized agents for domain context.** With the blast-radius file/symbol set in hand, identify project-registered specialized agents (in `.claude/agents/`) whose frontmatter description names a domain that overlaps that set — and dispatch them for *context only*. The dispatch prompt header:
+
+> "Provide CONTEXT only — no proposals, no critiques, no review comments. Describe what you know about the file/symbol set: conventions, gotchas, non-obvious dependencies, history."
+
+This is the first tier of a three-tier escalation: **context (here) → proposal review (Step 7) → code review (Step 11)**. The earliest dispatch is the cheapest — at Step 6 the cost of acting on agent context is shaping the next step's proposal; at Step 7 it's a one-line spec edit; at Step 11 it's a re-implementation.
+
+Calibration:
+- Dispatch only if the project has a `.claude/agents/` directory with project-registered agents. User-level agents (`~/.claude/agents/`) are general-purpose; skip by default.
+- Dispatch only agents whose description overlaps the blast-radius set — *not* every registered agent. "Always dispatch all" is the `bureaucratic_nudge` failure shape.
+- Dev-explicit naming in the spec's "Linked resources" overrides the heuristic — explicit naming is the strongest signal.
+
+Treat agent context the same way you'd treat a peer's verbal context — verify before relaying inferential claims into Step 7's proposal (`agent_speculation_unverified`). If agent context contradicts a deliberate architectural choice (Step 7's deliberate-state check), the choice still wins. Tagged class: `step_6_context_dispatch_skipped`.
 
 **Identify framework lifecycle dependencies:**
 - If the code under change reads from framework lifecycle state (Eloquent `$table`/`$exists`/attributes; Symfony container resolution; Rails ActiveRecord initialization; React component lifecycle; etc.), note it explicitly.
@@ -594,6 +607,12 @@ Before adding any debug output, confirm:
 - Where do logs go in this environment? (file? stderr? external service?)
 - How do you read them? (tail the file? docker logs? cloud dashboard?)
 - What is the full code path from the trigger to the failure?
+
+**Specialized agents for domain context** (the bug-workflow parallel to Step 6). Before tracing the code path, identify project-registered specialized agents (in `.claude/agents/`) whose frontmatter description names a domain that overlaps the bug's surface — and dispatch them for *context only*. The dispatch prompt header:
+
+> "Provide CONTEXT only — no proposals, no critiques, no diagnoses. Describe what you know about the affected area: conventions, gotchas, non-obvious dependencies, history."
+
+This is the first tier of a three-tier escalation for the bug workflow: **context (here) → proposal/fix (B6) → code review (B10)**. Same calibration as Step 6 — project-registered agents only, description-overlap, dev-explicit overrides, evidence-first on agent claims. Context informs root-cause analysis without bypassing the discriminating-diagnosis discipline below. Tagged class: `b4_context_dispatch_skipped`.
 
 1. Read the code path end-to-end from the reproduction steps to the failure point
 2. Form a hypothesis about the root cause
