@@ -313,12 +313,13 @@ Based on patterns found, propose implementation approach:
 1. If you aren't on a clean branch for the ticket create and checkout a fresh branch from the base branch (e.g., `develop`). Look at existing branch structure and follow it.
 2. **Verify branch sync.** Run `git log HEAD..origin/<base>` and confirm it's empty, or document the divergence in the spec. The baseline-vs-PR-diff signal silently degrades as base moves; surface drift now, not when drafting the PR. Tagged class: `baseline_drift`.
 3. Verify no uncommitted changes
-4. Run the full test suite before writing any code
-5. Log the results:
+4. **Verify destination before running anything that mutates data.** Before `migrate:fresh` / `db:wipe` / `RefreshDatabase` / any seed or truncate command, read the active connection string — `DATABASE_URL`, `.env.testing`, `phpunit.xml`'s env block, framework-specific override path — and confirm the host *and* database name are in the expected non-production set. If resolution is ambiguous (multiple `.env` files, framework override priority, CI-vs-local divergence, Docker-vs-host networking), pause and surface to the human before running. The `no_test_db_isolation` check below protects measurement validity; this check protects the *database itself*. Non-optional, no scale-down — the blast radius is "you wiped production" and the only recovery is the last backup. Tagged class: `destructive_test_command_against_wrong_db`.
+5. Run the full test suite before writing any code
+6. Log the results:
    - How many tests pass?
    - How many tests fail? Which ones?
    - Are there any skipped or incomplete tests?
-6. If tests are already failing, document them in the spec file as **pre-existing failures** — these are not your responsibility, but you need to know they exist so you don't waste time debugging them later
+7. If tests are already failing, document them in the spec file as **pre-existing failures** — these are not your responsibility, but you need to know they exist so you don't waste time debugging them later
 
 **Verify test-DB isolation before trusting the count.** Confirm the suite runs against an isolated, reset-per-run test database. If it runs against a shared or populated database, the pass/fail *count* drifts run-to-run from database content, not code — it is not a reliable baseline. In that case capture the baseline as the **failing-test set** (test name + file), not the count. Tagged class: `no_test_db_isolation`.
 
@@ -742,10 +743,11 @@ Same as feature Step 8.
 1. Create and checkout a fresh branch from the base branch
 2. **Verify branch sync.** Run `git log HEAD..origin/<base>` and confirm it's empty, or document the divergence in the spec. The baseline-vs-PR-diff signal silently degrades as base moves; surface drift now, not when drafting the PR. Tagged class: `baseline_drift`.
 3. Verify no uncommitted changes
-4. Run the full test suite before writing any code
-5. Log results — passes, failures, skips
-6. Document pre-existing failures — these are not yours
-7. **Verify test-DB isolation.** Confirm the suite runs against an isolated, reset-per-run test database. If it runs against a shared or populated database, the pass/fail *count* drifts run-to-run from database content, not code — capture the baseline as the **failing-test set** (test name + file), not the count. Tagged class: `no_test_db_isolation`.
+4. **Verify destination before running anything that mutates data.** Same check as Step 8 — read the active connection string, confirm host + database name are non-production. Even on bug-reproduction runs that "just" load fixtures, the load path can be destructive on the wrong target. Non-optional. Tagged class: `destructive_test_command_against_wrong_db`.
+5. Run the full test suite before writing any code
+6. Log results — passes, failures, skips
+7. Document pre-existing failures — these are not yours
+8. **Verify test-DB isolation.** Confirm the suite runs against an isolated, reset-per-run test database. If it runs against a shared or populated database, the pass/fail *count* drifts run-to-run from database content, not code — capture the baseline as the **failing-test set** (test name + file), not the count. Tagged class: `no_test_db_isolation`.
 
 **CHECKPOINT: Human confirms baseline is established.**
 
