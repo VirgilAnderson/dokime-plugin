@@ -110,6 +110,7 @@ If — and only if — the concept the check is *about* anchors cleanly (a Failu
   - Run ID — `<ticket-id>@<ISO-8601 start timestamp>` (e.g. `DKV2-T2@2026-05-22T16:00:00`); keys this run's checkpoint-outcome records — see *Recording Checkpoint Outcomes*
   - Full requirements/description
   - Acceptance criteria — **include the "interjection test" AC by default (T9)**: *"A fresh dev can resume from any step boundary using only this spec file."* Each step's exit state must leave the spec in a shape a colleague picking up the ticket cold could continue from. Prospective only — applies to specs created from T9 onward; pre-T9 specs are dogfood artifacts, no retro-audit.
+  - **Prerequisite-traced placement (T9 / Q-T9-9 lesson).** When the spec proposes work located at a specific workflow step ("at Step 3 we…", "Step 11 does…"), name the inputs the proposed work consumes — and check that the located step's prior steps actually produce them. If a Step-N proposal depends on data the workflow doesn't produce until Step-M (M > N), either the proposal belongs at Step-M (or later) or an intermediate step must be added to compute the inputs. The pivot cost grows with how late this is caught: at Step 1 it's a spec edit; at Step 7 it's a redesign. Tagged class: `spec_locates_work_at_step_without_prerequisites`.
   - Constraints (performance, backward compatibility, deployment)
   - Any linked resources, screenshots, or context
 - Inform the human where the spec file is saved
