@@ -102,6 +102,7 @@ If — and only if — the concept the check is *about* anchors cleanly (a Failu
 
 - **Resume vs. start.** Before creating the spec file, check whether one already exists for this ticket. If a spec file is found — especially with a feature branch carrying committed work — the workflow is being *resumed*, not started: do not restart at Step 1. Read the spec, determine the last completed step it records, and resume from there. If the spec records no clear resume point, ask the human where to pick up. Tagged class: `workflow_resume_unhandled`.
 - **Scan the Evolution Log** (bottom of this document) for recent entries — lessons from the last session may apply to this ticket. The log is operational, not archival; entries written in the morning can save work the same afternoon.
+- **Verify cited evolution-log entries and resource references against the actual artifacts**, not memory. If Step 1 quotes an evolution-log entry, a ticket number, or "what X says about Y," open the source and read it — memory of past entries decays; the entries themselves don't. Catching a citation error at Step 1 costs a spec edit; catching it at Step 6 / Step 13 costs implementation rollback. Tagged class: `step_1_citation_unverified`.
 - Parse the ticket/task requirements
 - Create the spec file
 - Write to the spec file:
