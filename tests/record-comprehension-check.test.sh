@@ -108,6 +108,30 @@ rc=$?
 check $? "invalid target_difficulty → non-zero, no write"
 rm -rf "$tmp12"
 
+# 13 — 7th arg pass present → schema_version=3 with pass and target_difficulty (T9)
+tmp13="$(mktemp -d)"
+DOKIME_MEASUREMENT_STORE="$tmp13" "$HELPER" "R" "T" "Step 3" "pass" "recall" "analyze" "what" >/dev/null 2>&1
+tail -1 "$tmp13/comprehension-checks.jsonl" 2>/dev/null \
+  | jq -e '.schema_version == 3 and .pass == "what" and .target_difficulty == "analyze"' >/dev/null 2>&1
+check $? "with pass + target_difficulty (T9) → schema_version=3 with both fields"
+rm -rf "$tmp13"
+
+# 14 — 7th arg pass present, 6th arg target_difficulty empty → v3 with pass, no target (T9)
+tmp14="$(mktemp -d)"
+DOKIME_MEASUREMENT_STORE="$tmp14" "$HELPER" "R" "T" "Step 3" "pass" "recall" "" "silent" >/dev/null 2>&1
+tail -1 "$tmp14/comprehension-checks.jsonl" 2>/dev/null \
+  | jq -e '.schema_version == 3 and .pass == "silent" and (has("target_difficulty") | not)' >/dev/null 2>&1
+check $? "pass without target_difficulty (T9) → schema_version=3 with pass, no target field"
+rm -rf "$tmp14"
+
+# 15 — invalid pass → non-zero, no write (T9)
+tmp15="$(mktemp -d)"
+DOKIME_MEASUREMENT_STORE="$tmp15" "$HELPER" "R" "T" "Step 3" "pass" "recall" "analyze" "BOGUS" >/dev/null 2>&1
+rc=$?
+[[ "$rc" -ne 0 && ! -f "$tmp15/comprehension-checks.jsonl" ]]
+check $? "invalid pass (T9) → non-zero, no write"
+rm -rf "$tmp15"
+
 echo
 echo "passed: $pass   failed: $fail"
 [[ "$fail" -eq 0 ]]

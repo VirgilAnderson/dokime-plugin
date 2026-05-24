@@ -95,6 +95,24 @@ check $? "codebase without project → non-zero, no write"
 jq -e . "$store" >/dev/null 2>&1
 check $? "cards.json remains valid JSON throughout"
 
+# 13 — new card with --label → schema_version=2 with label field (T9)
+run "labeled_concept" "skill" "pass" "An MCM-tagged card." --label "most_common_mistake" >/dev/null 2>&1
+jq -e '.[] | select(.concept=="labeled_concept") | .schema_version==2 and .label=="most_common_mistake"' "$store" >/dev/null 2>&1
+check $? "new card with --label → schema_version=2 with label field (T9)"
+
+# 14 — invalid --label → non-zero, no new card (T9)
+count_before=$(jq 'length' "$store" 2>/dev/null)
+run "bogus_label_concept" "skill" "pass" "Bad label test." --label "BOGUS" >/dev/null 2>&1
+rc=$?
+count_after=$(jq 'length' "$store" 2>/dev/null)
+[[ "$rc" -ne 0 && "$count_before" == "$count_after" ]]
+check $? "invalid --label (T9) → non-zero, no write"
+
+# 15 — new codebase card with project AND --label (T9)
+run "labeled-app:src/Bar.php" "codebase" "pass" "ED-tagged codebase card." "labeled-app" --label "essential_detail" >/dev/null 2>&1
+jq -e '.[] | select(.concept=="labeled-app:src/Bar.php") | .schema_version==2 and .label=="essential_detail" and .project=="labeled-app"' "$store" >/dev/null 2>&1
+check $? "codebase card with project + --label (T9) → v2 with label and project"
+
 echo
 echo "passed: $pass   failed: $fail"
 [[ "$fail" -eq 0 ]]

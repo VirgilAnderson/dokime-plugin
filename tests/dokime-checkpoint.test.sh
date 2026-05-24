@@ -132,6 +132,48 @@ reset_state
 [[ $? -ne 0 ]]
 check $? "invalid --target-difficulty → non-zero"
 
+# 13 — --comprehension-pass + --comprehension → v3 record with pass (T9)
+reset_state
+"$HELPER" "T9_R" "DKV2-T9" "Step 3" "approved-clean" \
+  --comprehension "pass" "recall" --comprehension-pass "silent" >/dev/null 2>&1
+tail -1 "$state_dir/comprehension-checks.jsonl" 2>/dev/null \
+  | jq -e '.schema_version == 3 and .pass == "silent"' >/dev/null 2>&1
+check $? "--comprehension-pass + --comprehension → v3 record with pass (T9)"
+
+# 14 — --comprehension-pass + --comprehension + --target-difficulty → v3 with both fields (T9)
+reset_state
+"$HELPER" "T9_R" "DKV2-T9" "Step 7" "approved-clean" \
+  --comprehension "pass" "apply" --target-difficulty "apply" --comprehension-pass "how" >/dev/null 2>&1
+tail -1 "$state_dir/comprehension-checks.jsonl" 2>/dev/null \
+  | jq -e '.schema_version == 3 and .pass == "how" and .target_difficulty == "apply"' >/dev/null 2>&1
+check $? "--comprehension-pass + --target-difficulty + --comprehension → v3 with both (T9)"
+
+# 15 — invalid --comprehension-pass enum → non-zero (T9)
+reset_state
+"$HELPER" "T9_R" "DKV2-T9" "Step 3" "approved-clean" \
+  --comprehension "pass" "recall" --comprehension-pass "BOGUS" >/dev/null 2>&1
+[[ $? -ne 0 ]]
+check $? "invalid --comprehension-pass → non-zero (T9)"
+
+# 16 — --card-label forwarded to capture-card → card written at v2 with label (T9)
+reset_state
+"$HELPER" "T9_R" "DKV2-T9" "Step 3" "approved-clean" \
+  --comprehension "pass" "recall" \
+  --card "t9_concept" "skill" "MCM-tagged via dokime-checkpoint." \
+  --card-label "most_common_mistake" >/dev/null 2>&1
+jq -e '.[] | select(.concept=="t9_concept") | .schema_version==2 and .label=="most_common_mistake"' \
+  "$state_dir/.dokime/knowledge/cards.json" >/dev/null 2>&1
+check $? "--card-label forwarded to capture-card → v2 with label (T9)"
+
+# 17 — invalid --card-label enum → non-zero (T9)
+reset_state
+"$HELPER" "T9_R" "DKV2-T9" "Step 3" "approved-clean" \
+  --comprehension "pass" "recall" \
+  --card "bogus_label" "skill" "Bad label test." \
+  --card-label "BOGUS" >/dev/null 2>&1
+[[ $? -ne 0 ]]
+check $? "invalid --card-label → non-zero (T9)"
+
 echo
 echo "passed: $pass   failed: $fail"
 [[ "$fail" -eq 0 ]]

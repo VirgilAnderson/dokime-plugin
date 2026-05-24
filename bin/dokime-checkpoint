@@ -13,18 +13,31 @@
 #                     [--card <concept> <deck> <description> [--card-project <project>]]
 #                     [--review <concept> <deck> <result> <difficulty> [<target_difficulty>]]   (repeatable, T7+T8)
 #                     [--target-difficulty <bloom>]                       (T8, applies to --comprehension)
+#                     [--comprehension-pass <pass>]                       (T9, applies to --comprehension)
+#                     [--card-label <label>]                              (T9, applies to --card)
 #
 #   <outcome>    ∈ approved-clean | approved-with-changes | reopened
 #   <result>     ∈ pass | fail   (inside --comprehension or --review)
 #   <difficulty> ∈ recall | apply | analyze | evaluate
 #   <deck>       ∈ codebase | skill
 #   <bloom>      ∈ recall | apply | analyze | evaluate
+#   <pass>       ∈ silent | what | how | why
+#   <label>      ∈ essential_detail | most_common_mistake | safety_tip | none
 #
 # --target-difficulty (T8): applies to --comprehension. When present, the
 # --comprehension record bumps to schema_version=2 carrying target_difficulty.
 # For each --review, the *per-card* target is carried as the optional 5th
 # positional arg of --review itself (different cards may need different
 # targets within the same call — Step 7's review-up-to-3 case).
+#
+# --comprehension-pass (T9): applies to --comprehension. When present, the
+# --comprehension record bumps to schema_version=3 carrying pass (and
+# target_difficulty if also set). Identifies which of the four delivery
+# passes (Silent → What → How → Why) produced the recorded question.
+#
+# --card-label (T9): applies to --card. When present, the card is written
+# with schema_version=2 and the label field. Categorises the card by its
+# discriminating function (essential_detail / most_common_mistake / safety_tip).
 #
 # The card's `result` is taken from --comprehension; --card therefore
 # requires --comprehension. The cross-cutting-concept skip from T6
@@ -52,7 +65,9 @@ if [[ -z "$run_id" || -z "$ticket_id" || -z "$step" || -z "$outcome" ]]; then
        "[--comprehension <result> <difficulty>]" \
        "[--card <concept> <deck> <description> [--card-project <project>]]" \
        "[--review <concept> <deck> <result> <difficulty> [<target_difficulty>]]   (repeatable)" \
-       "[--target-difficulty <bloom>]" >&2
+       "[--target-difficulty <bloom>]" \
+       "[--comprehension-pass <pass>]" \
+       "[--card-label <label>]" >&2
   exit 2
 fi
 
@@ -65,6 +80,8 @@ have_card=0; card_concept=""; card_deck=""; card_description=""
 card_project=""
 review_concepts=(); review_decks=(); review_results=(); review_difficulties=(); review_targets=()
 target_difficulty=""
+comp_pass=""
+card_label=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -105,6 +122,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --target-difficulty)
       target_difficulty="${2:-}"; shift 2 ;;
+    --comprehension-pass)
+      comp_pass="${2:-}"; shift 2 ;;
+    --card-label)
+      card_label="${2:-}"; shift 2 ;;
     *)
       echo "dokime-checkpoint: unknown argument '$1'" >&2
       exit 2 ;;
@@ -117,6 +138,26 @@ if [[ -n "$target_difficulty" ]]; then
     recall | apply | analyze | evaluate) ;;
     *) echo "dokime-checkpoint: invalid --target-difficulty '$target_difficulty'" \
             "(expected recall | apply | analyze | evaluate)" >&2
+       exit 2 ;;
+  esac
+fi
+
+# Validate --comprehension-pass enum early (T9).
+if [[ -n "$comp_pass" ]]; then
+  case "$comp_pass" in
+    silent | what | how | why) ;;
+    *) echo "dokime-checkpoint: invalid --comprehension-pass '$comp_pass'" \
+            "(expected silent | what | how | why)" >&2
+       exit 2 ;;
+  esac
+fi
+
+# Validate --card-label enum early (T9).
+if [[ -n "$card_label" ]]; then
+  case "$card_label" in
+    essential_detail | most_common_mistake | safety_tip | none) ;;
+    *) echo "dokime-checkpoint: invalid --card-label '$card_label'" \
+            "(expected essential_detail | most_common_mistake | safety_tip | none)" >&2
        exit 2 ;;
   esac
 fi
@@ -144,7 +185,13 @@ fi
 
 # 3) Optionally — the comprehension check result.
 if [[ $have_comp -eq 1 ]]; then
-  if [[ -n "$target_difficulty" ]]; then
+  # Branches by which T-fields are set (record-comprehension-check accepts
+  # target_difficulty as 6th positional and pass as 7th positional).
+  if [[ -n "$comp_pass" ]]; then
+    "$bin_dir/record-comprehension-check" \
+      "$run_id" "$ticket_id" "$step" "$comp_result" "$comp_difficulty" \
+      "$target_difficulty" "$comp_pass"
+  elif [[ -n "$target_difficulty" ]]; then
     "$bin_dir/record-comprehension-check" \
       "$run_id" "$ticket_id" "$step" "$comp_result" "$comp_difficulty" "$target_difficulty"
   else
@@ -154,14 +201,16 @@ if [[ $have_comp -eq 1 ]]; then
 fi
 
 # 4) Optionally — the card (uses --comprehension's result).
+# T9: forward --card-label to capture-card as --label when set.
 if [[ $have_card -eq 1 ]]; then
+  capture_args=("$card_concept" "$card_deck" "$comp_result" "$card_description")
   if [[ -n "$card_project" ]]; then
-    "$bin_dir/capture-card" \
-      "$card_concept" "$card_deck" "$comp_result" "$card_description" "$card_project"
-  else
-    "$bin_dir/capture-card" \
-      "$card_concept" "$card_deck" "$comp_result" "$card_description"
+    capture_args+=("$card_project")
   fi
+  if [[ -n "$card_label" ]]; then
+    capture_args+=("--label" "$card_label")
+  fi
+  "$bin_dir/capture-card" "${capture_args[@]}"
 fi
 
 # 5) Optionally — process any --review entries (T7).

@@ -5,16 +5,22 @@
 # Step 3 checkpoint alongside `record-comprehension-check` — see the
 # Step-3 Comprehension-check block in agents/dokime.md.
 #
-# Usage: capture-card <concept> <deck> <result> <description> [project]
+# Usage: capture-card <concept> <deck> <result> <description> [project] [--label <type>]
 #   deck    ∈ codebase | skill
 #   result  ∈ pass | fail
 #   project required iff deck = codebase
+#   --label ∈ essential_detail | most_common_mistake | safety_tip | none    (T9; optional)
 #
 # Behaviour:
 #   - card not found by `concept` slug → create (leitner_box=1, created+last_seen=now,
-#     history=[{result,timestamp}], project set if codebase);
+#     history=[{result,timestamp}], project set if codebase, label set if --label given);
 #   - card found → update: pass → min(leitner_box+1, 5); fail → 1; append
-#     history; update last_seen.
+#     history; update last_seen; update label iff --label provided.
+#
+# Schema versioning (T9): when --label is provided, the written card carries
+# `schema_version: 2` and the label field; without --label, new cards write
+# at `schema_version: 1` (pre-T9). Existing cards' schema_version is preserved
+# on update unless --label is provided (which bumps to 2).
 #
 # Path: $HOME/.dokime/knowledge/cards.json (fixed, per T5). Tests override HOME.
 # Write: atomic — write-to-temp-then-mv (the real file is only ever replaced
@@ -29,11 +35,37 @@ concept="${1:-}"
 deck="${2:-}"
 result="${3:-}"
 description="${4:-}"
-project="${5:-}"
+# 5th positional is project iff it doesn't start with --. Otherwise it's a flag.
+project=""
+if [[ "${5:-}" != "" && "${5:-}" != --* ]]; then
+  project="${5:-}"
+  shift 5
+else
+  shift 4 || true
+fi
+
+label=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --label) label="${2:-}"; shift 2 ;;
+    *)
+      echo "capture-card: unknown argument '$1'" >&2
+      exit 2 ;;
+  esac
+done
 
 if [[ -z "$concept" || -z "$deck" || -z "$result" || -z "$description" ]]; then
-  echo "usage: capture-card <concept> <deck> <result> <description> [project]" >&2
+  echo "usage: capture-card <concept> <deck> <result> <description> [project] [--label <type>]" >&2
   exit 2
+fi
+
+if [[ -n "$label" ]]; then
+  case "$label" in
+    essential_detail | most_common_mistake | safety_tip | none) ;;
+    *) echo "capture-card: invalid label '$label'" \
+            "(expected essential_detail | most_common_mistake | safety_tip | none)" >&2
+       exit 2 ;;
+  esac
 fi
 
 case "$deck" in
@@ -62,18 +94,23 @@ mkdir -p "$store_dir"
 timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 # Compute the next store state with jq.
+# T9: when $label is non-empty, the card is written/updated at schema_version=2
+# with the label field. Otherwise the existing behaviour holds (schema_version=1
+# on new cards; existing cards' schema_version preserved on update).
 new_store="$(jq \
   --arg concept "$concept" --arg deck "$deck" --arg result "$result" \
-  --arg description "$description" --arg project "$project" --arg ts "$timestamp" \
+  --arg description "$description" --arg project "$project" \
+  --arg label "$label" --arg ts "$timestamp" \
   '
   def update_card:
     .last_seen = $ts
     | .leitner_box = (if $result == "pass" then [.leitner_box + 1, 5] | min else 1 end)
-    | .history += [{result: $result, timestamp: $ts}];
+    | .history += [{result: $result, timestamp: $ts}]
+    | (if $label != "" then .label = $label | .schema_version = 2 else . end);
 
   def new_card:
     {
-      schema_version: 1,
+      schema_version: (if $label != "" then 2 else 1 end),
       concept: $concept,
       description: $description,
       deck: $deck,
@@ -82,7 +119,8 @@ new_store="$(jq \
       created: $ts,
       history: [{result: $result, timestamp: $ts}]
     }
-    | if $deck == "codebase" then . + {project: $project} else . end;
+    | (if $deck == "codebase" then . + {project: $project} else . end)
+    | (if $label != "" then . + {label: $label} else . end);
 
   if any(.[]; .concept == $concept) then
     map(if .concept == $concept then update_card else . end)

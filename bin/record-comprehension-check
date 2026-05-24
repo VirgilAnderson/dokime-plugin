@@ -8,14 +8,16 @@
 # The record carries NO developer identifier (decision D5 / Q-T1-6):
 # comprehension data is private to the developer.
 #
-# Usage: record-comprehension-check <run_id> <ticket_id> <step> <result> <difficulty> [target_difficulty]
+# Usage: record-comprehension-check <run_id> <ticket_id> <step> <result> <difficulty> [target_difficulty] [pass]
 #   result            ∈ pass | fail
 #   difficulty        ∈ recall | apply | analyze | evaluate   (Bloom level, self-tagged)
 #   target_difficulty ∈ recall | apply | analyze | evaluate   (Bloom level, recommended; T8)
+#   pass              ∈ silent | what | how | why             (delivery pass; T9)
 #
-# When target_difficulty is provided, the record is written at
-# schema_version=2 and carries the field. When absent, the record
-# stays at schema_version=1 (unchanged from pre-T8).
+# Schema versioning (readers tolerate v1/v2/v3):
+#   - pass present → schema_version=3 (carries pass and, if set, target_difficulty)
+#   - target_difficulty present, pass absent → schema_version=2 (T8)
+#   - neither present → schema_version=1 (pre-T8)
 #
 # Store path resolves by precedence:
 #   $DOKIME_MEASUREMENT_STORE
@@ -31,9 +33,10 @@ step="${3:-}"
 result="${4:-}"
 difficulty="${5:-}"
 target_difficulty="${6:-}"
+pass="${7:-}"
 
 if [[ -z "$run_id" || -z "$ticket_id" || -z "$step" || -z "$result" || -z "$difficulty" ]]; then
-  echo "usage: record-comprehension-check <run_id> <ticket_id> <step> <result> <difficulty> [target_difficulty]" >&2
+  echo "usage: record-comprehension-check <run_id> <ticket_id> <step> <result> <difficulty> [target_difficulty] [pass]" >&2
   exit 2
 fi
 
@@ -59,6 +62,15 @@ if [[ -n "$target_difficulty" ]]; then
   esac
 fi
 
+if [[ -n "$pass" ]]; then
+  case "$pass" in
+    silent | what | how | why) ;;
+    *) echo "record-comprehension-check: invalid pass '$pass'" \
+            "(expected silent | what | how | why)" >&2
+       exit 2 ;;
+  esac
+fi
+
 # Resolve the store directory (shared with the other record-* helpers — BL4).
 # shellcheck source=lib/resolve-store-path.sh
 source "$(dirname "$0")/lib/resolve-store-path.sh"
@@ -69,8 +81,29 @@ file="$store/comprehension-checks.jsonl"
 timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 # No developer identifier — D5 / Q-T1-6.
-# Schema bump: when target_difficulty is present, write v2; otherwise v1.
-if [[ -n "$target_difficulty" ]]; then
+# Schema bump:
+#   pass present → v3 (carries pass; carries target_difficulty if set)
+#   target_difficulty present, pass absent → v2 (T8)
+#   neither → v1 (pre-T8)
+if [[ -n "$pass" ]]; then
+  if [[ -n "$target_difficulty" ]]; then
+    record="$(jq -nc \
+      --argjson schema_version 3 \
+      --arg run_id "$run_id" --arg ticket_id "$ticket_id" \
+      --arg step "$step" --arg result "$result" \
+      --arg difficulty "$difficulty" --arg target_difficulty "$target_difficulty" \
+      --arg pass "$pass" --arg timestamp "$timestamp" \
+      '{schema_version: $schema_version, run_id: $run_id, ticket_id: $ticket_id, step: $step, result: $result, difficulty: $difficulty, target_difficulty: $target_difficulty, pass: $pass, timestamp: $timestamp}')"
+  else
+    record="$(jq -nc \
+      --argjson schema_version 3 \
+      --arg run_id "$run_id" --arg ticket_id "$ticket_id" \
+      --arg step "$step" --arg result "$result" \
+      --arg difficulty "$difficulty" \
+      --arg pass "$pass" --arg timestamp "$timestamp" \
+      '{schema_version: $schema_version, run_id: $run_id, ticket_id: $ticket_id, step: $step, result: $result, difficulty: $difficulty, pass: $pass, timestamp: $timestamp}')"
+  fi
+elif [[ -n "$target_difficulty" ]]; then
   record="$(jq -nc \
     --argjson schema_version 2 \
     --arg run_id "$run_id" --arg ticket_id "$ticket_id" \
