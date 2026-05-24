@@ -92,6 +92,8 @@ If — and only if — the concept the check is *about* anchors cleanly (a Failu
 
 `dokime-checkpoint` dispatches internally to the underlying record/capture helpers and resolves their store path itself; the dev's only job is to *call* `dokime-checkpoint` at each checkpoint. Like all dokime recording, this is **instrumentation, never a gate** — if `dokime-checkpoint` is not installed (an older plugin), skip and proceed.
 
+**Record shapes (per-version):** see `SCHEMA.md` in the plugin root for the canonical record schemas — base v1, T8 v2 (target_difficulty), T9 v3 (pass) — including jq-readable field tables, JSON examples, and the cross-version reader-tolerance contract. The CLI signature above is the *producer* contract; `SCHEMA.md` is the *record* contract.
+
 ---
 
 ## Step 1: Capture Specs
