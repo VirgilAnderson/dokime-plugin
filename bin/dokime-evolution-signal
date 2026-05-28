@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# dokime-evolution-signal — read-only recurrence sensor (dokime v2, ticket DKV2-T13).
+#
+# Component C v1. Reads the LaunchTest evolution feed and prints a Markdown
+# recurrence report: per failure_class — total count, distinct submitter_hash
+# (cross-dev signal), per-plugin_version breakdown, and first→last version.
+# Sorted by total desc (tiebreak: most-recent last). Null-failure_class records
+# (positive/unclassified) are excluded from the ranking and footnoted.
+#
+# READ-ONLY: no PATCH/POST. The output is a report, not an action — the
+# maintainer reads it to inform a triage walk. The promote/kill decision and
+# the "since-rule-added" window are siblings (T15 / T16), not in v1.
+#
+# Corpus resolution (precedence):
+#   $DOKIME_EVOLUTION_FIXTURE  path to a JSON array of records (offline; tests)
+#   else: maintainer key ($DOKIME_MAINTAINER_KEY or ~/.claude/dokime-credentials.json)
+#         + union of the 4 status queries (status=all returns null on this API).
+#
+# A7 (bureaucratic_nudge): 0 records is NOT reported as a confident "no signal"
+# — the API silently throttles bursts to empty-200, so an empty corpus is
+# ambiguous between "feed empty" and "rate-limited". Emit a hedge and stop.
+#
+# Requires: jq, curl.
+set -euo pipefail
+
+api_base="${DOKIME_EVOLUTION_URL:-https://launchtest.app/api/dokime/evolution}"
+fixture="${DOKIME_EVOLUTION_FIXTURE:-}"
+
+if [ -n "$fixture" ]; then
+  [ -f "$fixture" ] || { echo "dokime-evolution-signal: fixture not found: $fixture" >&2; exit 1; }
+  records="$(cat "$fixture")"
+else
+  # Resolve the maintainer key (same pattern as /dokime:triage).
+  key="${DOKIME_MAINTAINER_KEY:-}"
+  if [ -z "$key" ]; then
+    creds="$HOME/.claude/dokime-credentials.json"
+    [ -f "$creds" ] && key="$(jq -r '.maintainer_key // empty' "$creds")"
+  fi
+  if [ -z "$key" ]; then
+    echo "dokime-evolution-signal: maintainer key not found. Set DOKIME_MAINTAINER_KEY, or create ~/.claude/dokime-credentials.json with {\"maintainer_key\":\"<key>\"}." >&2
+    exit 1
+  fi
+  # status=all is null on this API → union the 4 statuses. Space the requests:
+  # the API throttles bursts to empty-200 (see A7).
+  records="[]"
+  for status in pending reviewed promoted dismissed; do
+    resp="$(curl -sS --max-time 10 "$api_base?status=$status&limit=500" \
+      -H "Authorization: Bearer $key" -H "Accept: application/json" 2>/dev/null || echo '{}')"
+    chunk="$(printf '%s' "$resp" | jq -c '.data // []' 2>/dev/null || echo '[]')"
+    records="$(jq -c -n --argjson a "$records" --argjson b "$chunk" '$a + $b')"
+    sleep 0.3
+  done
+fi
+
+# A7: empty corpus → hedge, do not manufacture a clean bill of health.
+if [ "$(printf '%s' "$records" | jq 'length')" -eq 0 ]; then
+  echo "No records returned — feed empty OR rate-limited; re-run to confirm."
+  exit 0
+fi
+
+# Aggregate + render. Sort: total desc, then last-seen desc, then class
+# (achieved by ascending sort on [total, last_seen, class] then reverse).
+printf '%s' "$records" | jq -r '
+  (map(select(.failure_class == null)) | length) as $positives
+  | [ .[] | select(.failure_class != null) ]
+  | group_by(.failure_class)
+  | map(
+      (sort_by(.created_at)) as $g
+      | {
+          class:     $g[0].failure_class,
+          total:     ($g | length),
+          devs:      ([ $g[].submitter_hash ] | map(select(. != null)) | unique | length),
+          first_v:   ($g[0].plugin_version  // "(unversioned)"),
+          last_v:    ($g[-1].plugin_version // "(unversioned)"),
+          last_seen: ($g[-1].created_at),
+          versions:  ($g | group_by(.plugin_version)
+                          | map("\(.[0].plugin_version // "(unversioned)")(\(length))")
+                          | join(" "))
+        }
+    )
+  | sort_by([.total, .last_seen, .class]) | reverse
+  | (
+      "# Dokime Evolution Signal",
+      "",
+      "| Failure class | Total | Devs | Versions | First→Last |",
+      "|---|---|---|---|---|",
+      (.[] | "| \(.class) | \(.total) | \(.devs) | \(.versions) | \(.first_v) → \(.last_v) |"),
+      "",
+      (if $positives > 0
+       then "_\($positives) positive/unclassified observation(s) not shown (null failure_class)._"
+       else empty end)
+    )
+'

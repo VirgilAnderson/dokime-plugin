@@ -75,6 +75,7 @@ A `SessionStart` hook checks whether your installed version is behind the latest
 | `/dokime:review` | Run a Dokime code review on a PR branch — verdicts each acceptance criterion, runs Pass 3 (Rule 11, Rule 12, specialized agents), filters issues by confidence, produces Bitbucket-flavored inline-comment blocks |
 | `/dokime:evolve` | Submit a workflow lesson learned for review — captures what the workflow caught or missed in a session so the maintainer can promote it across all users |
 | `/dokime:triage` | Maintainer-only — walk through the evolution feed (pending entries from `/dokime:evolve`), mark each as promoted / reviewed / dismissed. Requires `DOKIME_MAINTAINER_KEY` in env or `~/.claude/dokime-credentials.json` |
+| `/dokime:evolution-signal` | Maintainer-only — read-only recurrence report over the evolution feed: per failure_class total, distinct cross-dev submitters, per-version breakdown, first→last version. Informs a triage walk; doesn't act. Requires `DOKIME_MAINTAINER_KEY` |
 | `/dokime:update` | Pull the latest version and reinstall the plugin |
 | `/dokime:version` | Show installed version and check for updates |
 
