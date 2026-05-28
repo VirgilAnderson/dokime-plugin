@@ -63,6 +63,10 @@ claude plugin install dokime
 claude plugin install dokime --scope project
 ```
 
+### Staying current
+
+A `SessionStart` hook checks whether your installed version is behind the latest and, if so, surfaces a one-line nudge at session start (e.g. *"Dokime: 1.20.0 installed, 1.22.0 available — run /dokime:update"*). It's inform-only and never blocks: the network check has a 2-second timeout and fails silent (offline or up-to-date → nothing shown). Staying current also keeps the evolution loop's signal clean — submissions tagged with a current version make the per-rule recurrence measurement accurate.
+
 ## Skills
 
 | Skill | Description |

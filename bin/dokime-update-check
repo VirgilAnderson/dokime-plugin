@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# dokime-update-check — SessionStart update nudge (dokime v2, ticket DKV2-T14).
+#
+# Compares the installed plugin version against the latest published version
+# and prints a one-line nudge to stdout iff installed < latest. Wired as a
+# SessionStart hook (hooks/hooks.json); its stdout is injected into the session
+# context, so the assistant surfaces the nudge at session start.
+#
+# Contract:
+#   - Inform-only. ALWAYS exits 0. Fail-silent on any network/parse failure.
+#   - NOTE: this script deliberately does NOT use `set -e` (the house style for
+#     the other bins). For a SessionStart hook a non-zero mid-script exit is
+#     exactly the failure mode to avoid — exit 0 is what routes stdout into the
+#     session context (a non-zero exit routes to stderr/log and the nudge would
+#     not surface). Strictness here would defeat the feature, not protect it.
+#
+# Sources (precedence):
+#   installed  ${CLAUDE_PLUGIN_ROOT}/VERSION   (fallback: ../VERSION rel. to this script)
+#   latest     $DOKIME_LATEST_VERSION          (test seam — skips curl)
+#              else curl $DOKIME_LATEST_URL     (default: raw VERSION on main)
+#
+# Requires: curl (no jq — versions are plain text).
+set -uo pipefail
+
+# --- installed version ---------------------------------------------------
+root="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+installed=""
+[ -f "$root/VERSION" ] && installed="$(tr -d '[:space:]' < "$root/VERSION")"
+[ -n "$installed" ] || exit 0
+
+# --- latest version ------------------------------------------------------
+url="${DOKIME_LATEST_URL:-https://raw.githubusercontent.com/VirgilAnderson/dokime-plugin/main/VERSION}"
+latest="${DOKIME_LATEST_VERSION:-}"
+if [ -z "$latest" ]; then
+  latest="$(curl -sS --max-time 2 "$url" 2>/dev/null | tr -d '[:space:]')" || latest=""
+fi
+[ -n "$latest" ] || exit 0
+
+# --- validate both are dotted-numeric; bail silent otherwise -------------
+is_semver() { [[ "$1" =~ ^[0-9]+(\.[0-9]+)*$ ]]; }
+is_semver "$installed" || exit 0
+is_semver "$latest" || exit 0
+
+# --- pure-bash numeric compare: is $1 < $2 ? -----------------------------
+# Field-by-field base-10 compare (NOT lexicographic — "1.9.0" must sort below
+# "1.10.0"). `10#` forces base-10 so zero-padded fields don't read as octal.
+version_lt() {
+  local IFS=.
+  local -a av=($1) bv=($2)
+  local i max=${#av[@]}
+  [ "${#bv[@]}" -gt "$max" ] && max=${#bv[@]}
+  for ((i = 0; i < max; i++)); do
+    local x="${av[i]:-0}" y="${bv[i]:-0}"
+    if ((10#$x < 10#$y)); then return 0; fi
+    if ((10#$x > 10#$y)); then return 1; fi
+  done
+  return 1 # equal → not less-than
+}
+
+if version_lt "$installed" "$latest"; then
+  printf 'Dokime: %s installed, %s available — run /dokime:update\n' "$installed" "$latest"
+fi
+exit 0
