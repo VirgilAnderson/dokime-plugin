@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# dokime-rule-versions — rule-creation version per failure class (dokime v2, ticket DKV2-T15).
+#
+# For each failure_class, reports the plugin_version its rule was created in,
+# recovered from GIT HISTORY of agents/dokime.md (the version is NOT in the
+# Evolution-Log prose — measured: ~2 of ~50 classes name a version there).
+# Per class: the first commit that introduced the backticked `class` string →
+# VERSION at that commit. No commit, or no VERSION at that commit → null.
+#
+# Usage:
+#   dokime-rule-versions [class ...]   given classes → version just those (T16's case)
+#   dokime-rule-versions               no args → extract + version all doc-tagged classes
+#
+# Output: JSON object { "<class>": "<version>" | null }.
+# Consumer: the T16 policy (compose with T13 recurrence → before/after-rule delta).
+#
+# Read-only over git. Requires: git, jq. Runs in the plugin repo (needs the
+# agents/dokime.md history) — ${CLAUDE_PLUGIN_ROOT} or script-relative root.
+set -euo pipefail
+
+root="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+doc="$root/agents/dokime.md"
+
+# --- class list: explicit args, else extract doc-tagged classes ----------
+classes=()
+if [ "$#" -gt 0 ]; then
+  classes=("$@")
+else
+  [ -f "$doc" ] || { echo "dokime-rule-versions: agents/dokime.md not found under $root" >&2; exit 1; }
+  # Tag-prefixed introductions only ("New failure class: \`x\`", "Tagged class: \`x\`",
+  # "failure class registered as \`x\`"); excludes bare-backtick non-class tokens.
+  while IFS= read -r c; do
+    [ -n "$c" ] && classes+=("$c")
+  done < <(grep -ioE '(New failure class|Tagged class|failure class registered as)[^`]*`[a-z_]+`' "$doc" \
+             | sed -E 's/.*`([a-z_]+)`.*/\1/' | sort -u)
+fi
+
+# --- per class → version (or null), emitted as class<TAB>version ---------
+emit_pairs() {
+  local cls needle commit version
+  for cls in "${classes[@]}"; do
+    needle="$(printf '`%s`' "$cls")"
+    commit="$(git -C "$root" log --reverse -S"$needle" --format=%H -- agents/dokime.md 2>/dev/null | head -1 || true)"
+    version=""
+    if [ -n "$commit" ]; then
+      version="$(git -C "$root" show "$commit:VERSION" 2>/dev/null | tr -d '[:space:]' || true)"
+    fi
+    printf '%s\t%s\n' "$cls" "$version"
+  done
+}
+
+emit_pairs | jq -R -s '
+  split("\n")
+  | map(select(length > 0) | split("\t") | {(.[0]): (if (.[1] | length) == 0 then null else .[1] end)})
+  | add // {}
+'
