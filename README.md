@@ -167,11 +167,34 @@ Create `.claude/dokime-config.json` in your project root:
   "codesniffer_command": "phpcs",
   "base_branch": "develop",
   "stakeholders": ["Product Owner", "Tech Lead", "QA"],
-  "specialized_agents": []
+  "specialized_agents": [],
+  "style_guides": [
+    "~/.claude/dokime/style-guides/conditionals.md",
+    "~/.claude/dokime/style-guides/comments.md"
+  ]
 }
 ```
 
 The plugin reads this file to customize paths, commands, and team-specific settings without modifying the core workflow.
+
+### Style guides
+
+`style_guides` is an optional array of file paths pointing at house-style documents the workflow should apply to this codebase. It works exactly like `specialized_agents` — you store the documents somewhere and list them in the config; the plugin reads whatever you point at and ships no rules, no content, and no default location of its own. dokime stays an abstract tool; every codebase supplies its own rules.
+
+**Where to store the documents.** Keep them outside the repo, in an untracked, user-global library so multiple codebases can share canonical files and a client repo gains no new tracked files:
+
+```
+~/.claude/dokime/style-guides/
+├── conditionals.md
+├── comments.md
+└── …add topics as you write them
+```
+
+Paths may be absolute or use a leading `~`. Topic-per-file is the intended granularity — one document per concern (conditionals, comments, error handling, …).
+
+**How it's applied.** The dev workflow reads every declared guide at **Step 6** (feature) and **Step B10** (bug fix) as a first-class project style source. The review skill (`/dokime:review`) reads them too, but — per Bacchelli — flags only clear, material violations of an explicitly stated rule, never nits. On a direct conflict between a declared guide and an inline `CLAUDE.md` style section, the inline source wins (it's more specific to the repo) and the conflict is surfaced rather than silently resolved.
+
+**Per-codebase independence.** Config resolves by working directory, so each codebase applies its own list. A backend and its SPA — or several services in a monorepo-of-repos — each keep their own `.claude/dokime-config.json` with their own `style_guides`. They can share files (point at the same `conditionals.md`), select different subsets, or use language-specific variants (`conditionals.php.md` vs `conditionals.ts.md`); the choice is per config file. Omit the field entirely and behavior is unchanged.
 
 ## When to Use
 

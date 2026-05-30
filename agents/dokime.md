@@ -214,7 +214,9 @@ Log tradeoff evaluations to the spec file.
 ## Step 6: Analyze Codebase
 
 **Read the project first:**
-- **Read project style sources concretely.** Not "a style guide" — name and read what governs *this* codebase. In rough order of specificity: (1) project `CLAUDE.md` style sections; (2) top-level `STYLE.md`, `CONTRIBUTING.md`, `.github/CONTRIBUTING.md`; (3) language tooling configs — PHP: `pint.json`, `phpcs.xml`; JS/TS: `.eslintrc*` / `eslint.config.*` / `.prettierrc`; Python: `pyproject.toml [tool.ruff]/[tool.black]`, `.flake8`; Ruby: `.rubocop.yml`; Go: `.golangci.yml`; (4) `.editorconfig`; (5) framework conventions in framework docs. Not a checklist — read until you have what governs this codebase. The discipline is concrete lookup, not list completion. Tagged class: `abstract_instruction_vacuously_honored`.
+- **Read project style sources concretely.** Not "a style guide" — name and read what governs *this* codebase. In rough order of specificity: (0) **declared style guides** — if the resolved `.claude/dokime-config.json` lists `style_guides`, read every file it names; these are rules this codebase explicitly opted into and are authoritative for it (see "Declared style guides" below); (1) project `CLAUDE.md` style sections; (2) top-level `STYLE.md`, `CONTRIBUTING.md`, `.github/CONTRIBUTING.md`; (3) language tooling configs — PHP: `pint.json`, `phpcs.xml`; JS/TS: `.eslintrc*` / `eslint.config.*` / `.prettierrc`; Python: `pyproject.toml [tool.ruff]/[tool.black]`, `.flake8`; Ruby: `.rubocop.yml`; Go: `.golangci.yml`; (4) `.editorconfig`; (5) framework conventions in framework docs. Not a checklist — read until you have what governs this codebase. The discipline is concrete lookup, not list completion. Tagged class: `abstract_instruction_vacuously_honored`.
+
+  **Declared style guides.** `style_guides` is an array of file paths (absolute, or `~`-expanded) the project chose to apply — the same opt-in mechanism as `specialized_agents`, but for house-style documents rather than domain agents. The files live wherever the project points (commonly an untracked, user-global library shared across codebases); the plugin reads whatever paths the config declares and bakes in no location or content of its own. Config resolves by working directory, so sibling codebases (e.g. a backend and its SPA) each declare their own `style_guides` and apply independently. Treat a declared guide as a first-class project style source. On direct conflict between a declared guide and an inline `CLAUDE.md` style section, prefer the inline source (most specific to this repo) and surface the conflict rather than silently choosing.
 - Identify coding standards, conventions, and architectural patterns the project follows
 - Note the testing conventions — how are tests organized, named, what factories/fixtures exist?
 
@@ -807,7 +809,7 @@ Same as feature Step 11. Two-pass review:
 - Is it scoped to the fix proposal from B6?
 
 **Pass 2 — Code quality:**
-- Does the code follow the project's coding standards?
+- Does the code follow the project's coding standards — including any files the resolved `.claude/dokime-config.json` declares in `style_guides`? (Read them here as in feature Step 6; config resolves by working directory, so the fixed codebase's own declared guides apply.)
 - Are there security or performance concerns introduced by the fix?
 - Is the fix minimal — does it change only what's necessary?
 

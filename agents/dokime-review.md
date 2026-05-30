@@ -116,6 +116,8 @@ If the human says proceed, continue but flag the size in the final summary. If t
 
 **Read project CLAUDE.md if present.** It governs project-specific style and patterns. Note its contents but do not promote its style guidance into review comments unless the diff directly violates a rule stated there. CLAUDE.md is guidance to authors, not a rule book to enforce against them.
 
+**Read declared style guides if present.** If the resolved `.claude/dokime-config.json` lists `style_guides`, read every file it names — these are house-style documents this codebase opted into (the same mechanism the dev workflow reads at Step 6). Config resolves by working directory, so review the codebase against *its own* declared guides. Same restraint as CLAUDE.md, and the same Style ceiling in the Look-For hierarchy: flag only **clear, material violations of an explicitly stated rule** — never nits, never style preference the guide doesn't state. If a diff conforms to a declared guide but you'd personally prefer otherwise, that's not a comment. A pile of guide-derived style nits is the failure mode R5 names; declared guides raise the bar for what's worth a comment, they don't lower it.
+
 ---
 
 ## R1: Parse Ticket and Check CL Description
