@@ -170,7 +170,7 @@ Create `.claude/dokime-config.json` in your project root:
   "specialized_agents": [],
   "style_guides": [
     "~/.claude/dokime/style-guides/conditionals.md",
-    "~/.claude/dokime/style-guides/comments.md"
+    "~/.claude/dokime/style-guides/self-documenting-code.md"
   ]
 }
 ```
@@ -186,7 +186,7 @@ The plugin reads this file to customize paths, commands, and team-specific setti
 ```
 ~/.claude/dokime/style-guides/
 ├── conditionals.md
-├── comments.md
+├── self-documenting-code.md
 └── …add topics as you write them
 ```
 
