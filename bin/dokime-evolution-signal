@@ -19,6 +19,9 @@
 # A7 (bureaucratic_nudge): 0 records is NOT reported as a confident "no signal"
 # — the API silently throttles bursts to empty-200, so an empty corpus is
 # ambiguous between "feed empty" and "rate-limited". Emit a hedge and stop.
+# HTTP errors (e.g. a 4xx from an out-of-range limit) are surfaced distinctly
+# and NEVER folded into that empty-hedge — a validation error is not an empty
+# feed. The API caps `limit` at 200; a higher value returns 422.
 #
 # Requires: jq, curl.
 set -euo pipefail
@@ -40,16 +43,40 @@ else
     echo "dokime-evolution-signal: maintainer key not found. Set DOKIME_MAINTAINER_KEY, or create ~/.claude/dokime-credentials.json with {\"maintainer_key\":\"<key>\"}." >&2
     exit 1
   fi
-  # status=all is null on this API → union the 4 statuses. Space the requests:
-  # the API throttles bursts to empty-200 (see A7).
+  # status=all is null on this API → union the 4 statuses. The API caps `limit`
+  # at 200 (higher → 422) and throttles bursts to empty-200, so requests are
+  # spaced. HTTP errors are surfaced, never swallowed as "empty" (see A7).
+  limit=200
   records="[]"
+  truncated=""
   for status in pending reviewed promoted dismissed; do
-    resp="$(curl -sS --max-time 10 "$api_base?status=$status&limit=500" \
-      -H "Authorization: Bearer $key" -H "Accept: application/json" 2>/dev/null || echo '{}')"
-    chunk="$(printf '%s' "$resp" | jq -c '.data // []' 2>/dev/null || echo '[]')"
+    body="$(mktemp)"
+    code="$(curl -sS --max-time 10 -o "$body" -w '%{http_code}' \
+      "$api_base?status=$status&limit=$limit" \
+      -H "Authorization: Bearer $key" -H "Accept: application/json" 2>/dev/null || echo '000')"
+    if [ "$code" = "000" ]; then
+      rm -f "$body"
+      echo "dokime-evolution-signal: network error querying status=$status (no HTTP response). Re-run." >&2
+      exit 2
+    fi
+    if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+      msg="$(jq -r '.message // .error // "(no message)"' "$body" 2>/dev/null || echo '(unparseable body)')"
+      rm -f "$body"
+      echo "dokime-evolution-signal: API error HTTP $code for status=$status — $msg" >&2
+      echo "  This is an API/validation error, NOT an empty feed. ($api_base?status=$status&limit=$limit)" >&2
+      exit 2
+    fi
+    chunk="$(jq -c '.data // []' "$body" 2>/dev/null || echo '[]')"
+    if [ "$(printf '%s' "$chunk" | jq 'length')" -ge "$limit" ]; then
+      truncated="$truncated $status"
+    fi
     records="$(jq -c -n --argjson a "$records" --argjson b "$chunk" '$a + $b')"
+    rm -f "$body"
     sleep 0.3
   done
+  if [ -n "$truncated" ]; then
+    echo "dokime-evolution-signal: WARNING — status(es)$truncated hit the $limit-row cap; results may be truncated (pagination is a follow-up)." >&2
+  fi
 fi
 
 # A7: empty corpus → hedge, do not manufacture a clean bill of health.
